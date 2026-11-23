@@ -284,23 +284,51 @@ function fillJaDates() {
   }
   sel.value = dates.includes(day) ? day : (dates.filter((d) => d <= day).pop() || dates[dates.length - 1]);
 }
-const hasAudio = () => index.ja_audio && index.ja_audio === jaDate;
+const hasAudio = (d = jaDate) => !!index.ja_audio && index.ja_audio === d;
 function stopAudio() {
   if (curAudio) { curAudio.pause(); curAudio = null; }
-  if (curAudioEl) { curAudioEl.classList.remove("playing"); curAudioEl = null; }
+  if (curAudioEl) { curAudioEl.classList.remove("playing"); if (curAudioEl.id === "ja-full") curAudioEl.textContent = "▶ 听全文"; curAudioEl = null; }
+  document.querySelectorAll(".ja-line.now").forEach((x) => x.classList.remove("now"));
 }
-async function playAudio(file, el) {
-  if (!file || !hasAudio()) return;
-  if (curAudioEl === el && curAudio) { stopAudio(); return; } // 再点一下停止
+async function audioUrl(d, file) {
+  const k = `${d}/${file}`;
+  if (!audioUrls[k]) {
+    const bytes = await decryptBytes(await fetchText(`data/ja-audio/${d}/${file}.enc`));
+    audioUrls[k] = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+  }
+  return audioUrls[k];
+}
+async function playAudio(file, el, d = jaDate) {
+  if (!file || !hasAudio(d)) return;
+  if (el && curAudioEl === el && curAudio) { stopAudio(); return; } // 再点一下停止
   stopAudio();
   try {
-    const k = `${jaDate}/${file}`;
-    if (!audioUrls[k]) {
-      const bytes = await decryptBytes(await fetchText(`data/ja-audio/${jaDate}/${file}.enc`));
-      audioUrls[k] = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
-    }
-    curAudio = new Audio(audioUrls[k]); curAudioEl = el || null;
+    const url = await audioUrl(d, file);
+    curAudio = new Audio(url); curAudioEl = el || null;
     if (curAudioEl) curAudioEl.classList.add("playing");
+    curAudio.addEventListener("ended", stopAudio);
+    await curAudio.play();
+  } catch { stopAudio(); }
+}
+// 听全文：播放 ALL.mp3，按每句的 start / end 高亮当前句并滚动过去
+async function playFull(btn, dlg) {
+  if (curAudioEl === btn && curAudio) { stopAudio(); return; }
+  stopAudio();
+  try {
+    const url = await audioUrl(jaDate, dlg.full_audio);
+    curAudio = new Audio(url); curAudioEl = btn;
+    btn.classList.add("playing"); btn.textContent = "■ 停止";
+    const rows = [...document.querySelectorAll("#ja-body .ja-line")];
+    let last = -1;
+    curAudio.addEventListener("timeupdate", () => {
+      if (!curAudio) return;
+      const t = curAudio.currentTime;
+      const i = dlg.lines.findIndex((l) => t >= (l.start || 0) && t < (l.end || 0) + 0.6);
+      if (i === last) return;
+      last = i;
+      rows.forEach((r, k) => r.classList.toggle("now", k === i));
+      if (i >= 0 && rows[i]) rows[i].scrollIntoView({ behavior: "smooth", block: "center" });
+    });
     curAudio.addEventListener("ended", stopAudio);
     await curAudio.play();
   } catch { stopAudio(); }
@@ -325,7 +353,7 @@ async function renderJapanese() {
   if (j.extra) h += `<p class="ja-extra">另外记住：${inline(j.extra)}</p>`;
   if (j.dialogue && (j.dialogue.lines || []).length) {
     h += sec("对话", `${j.dialogue.scene ? `<p class="muted small">${inline(j.dialogue.scene)}</p>` : ""}
-      <button class="btn ghost small-btn" id="ja-zh-all">显示全部翻译</button>
+      <div class="dlg-tools">${au && j.dialogue.full_audio ? '<button class="btn small-btn full-btn" id="ja-full">▶ 听全文</button>' : ""}<button class="btn ghost small-btn" id="ja-zh-all">显示全部翻译</button></div>
       ${j.dialogue.lines.map((l) => `<div class="ja-line"><span class="ja-who">${esc(l.who || "")}</span><div class="ja-line-main"><div class="${au && l.audio ? "tap" : ""}"${play(l.audio)}>${ruby(l.ja_ruby || inline(l.ja))} ${icon(l.audio)}</div><div class="ja-zh hidden">${inline(l.zh || "")}</div></div><button class="zh-btn" aria-label="显示这一句的翻译">译</button></div>`).join("")}
       <p class="muted small">点句子听发音，点右边的“译”看这一句的翻译。</p>`);
   }
@@ -364,6 +392,8 @@ async function renderJapanese() {
   box.innerHTML = h;
   box.querySelectorAll("[data-audio]").forEach((el) => el.addEventListener("click", (e) => { e.stopPropagation(); playAudio(el.dataset.audio, el); }));
   box.querySelectorAll(".zh-btn").forEach((b) => b.addEventListener("click", () => b.parentElement.querySelector(".ja-zh").classList.toggle("hidden")));
+  const full = $("ja-full");
+  if (full) full.addEventListener("click", () => playFull(full, j.dialogue));
   const all = $("ja-zh-all");
   if (all) all.addEventListener("click", () => {
     const show = all.textContent.startsWith("显示");
@@ -489,11 +519,111 @@ async function renderDigest() {
 
 // 从任务的按钮跳到别的页面：ja / ja-recite / digest
 function gotoLink(link) {
-  if (link === "digest") {
+  if (link === "digest" || link === "ja-review") {
     closeSheets();
-    document.querySelector('.tab[data-tab="digest"]').click();
+    document.querySelector(`.tab[data-tab="${link === "digest" ? "digest" : "review"}"]`).click();
     window.scrollTo({ top: 0, behavior: "smooth" });
   } else gotoJapanese(link);
+}
+
+// ---------- 日语复习（日语对话的 review_sync.py 生成队列，推送时加密成 data/ja-review/日期.json.enc） ----------
+// 交互照 日语教材/review.html：翻面 → 播放 → 忘记 / 模糊 / 记住；忘记的最后再练一次（不记录）。
+// 选择写进当天 state 的 ja_review：{"<id>": {result, direction, at}}，每条只记第一次。
+let rv = null; // {data, queue, again, practice, current, tally, total}
+function plainRuby(html) { const d = document.createElement("div"); d.innerHTML = ruby(html); d.querySelectorAll("rt").forEach((r) => r.remove()); return esc(d.textContent); }
+async function renderReview() {
+  const box = $("review-body");
+  if (!index.ja_review || index.ja_review !== day) {
+    box.innerHTML = '<p class="muted dg-empty">今天的日语复习还没推送，推送后这里会出现要复习的卡片。</p>';
+    return;
+  }
+  if (!rv) {
+    box.innerHTML = '<p class="muted">读取中…</p>';
+    let data;
+    try { data = await decryptJSON(await fetchText(`data/ja-review/${day}.json.enc`)); } catch { box.innerHTML = '<p class="muted">复习队列读取失败。</p>'; return; }
+    const doneMap = state.ja_review || {};
+    const tally = { right: 0, fuzzy: 0, wrong: 0, ...((data.stats || {}).today || {}) };
+    for (const rec of Object.values(doneMap)) if (tally[rec.result] != null) tally[rec.result]++;
+    const queue = (data.items || []).filter((it) => !doneMap[String(it.id)]);
+    rv = { data, queue, again: [], practice: false, current: null, tally, total: queue.length + tally.right + tally.fuzzy + tally.wrong };
+  }
+  if (rv.current) drawReviewCard(); else nextReview();
+}
+function reviewHeader() {
+  const t = rv.tally, doneN = t.right + t.fuzzy + t.wrong;
+  return `<div class="rv-top"><div class="rv-tally"><span class="t-ok">记住 ${t.right}</span><span class="t-mid">模糊 ${t.fuzzy}</span><span class="t-bad">忘记 ${t.wrong}</span></div>
+    <div class="bar"><div style="width:${rv.total ? Math.round(100 * doneN / rv.total) : 100}%"></div></div></div>`;
+}
+function nextReview() {
+  if (!rv.queue.length && rv.again.length && !rv.practice) { rv.practice = true; rv.queue = rv.again; rv.again = []; }
+  rv.current = rv.queue.shift() || null;
+  if (!rv.current) return finishReview();
+  drawReviewCard();
+}
+function drawReviewCard() {
+  const it = rv.current, rec = it.direction === "recognize", au = hasAudio(day) && it.audio;
+  const spk = au ? ' <button class="play-btn" data-a="1" aria-label="播放">🔊</button>' : "";
+  let ask, front, back;
+  if (it.kind === "word") {
+    ask = rec ? "看日语：说出读音和意思" : "看中文：说出日语";
+    front = rec ? `<div class="rv-front">${esc(it.front)}</div>` : `<div class="rv-front zh">${esc(it.meaning)}</div>`;
+    back = `<div class="ja-big">${ruby(it.ruby || esc(it.front))}${spk}</div><div>${esc(it.reading || "")}｜${esc(it.meaning || "")}</div>
+      ${it.example_ruby ? `<div class="ja-ex">${ruby(it.example_ruby)}<div class="muted small">${esc(it.example_zh || "")}</div></div>` : it.example ? `<div class="muted">${esc(it.example)}</div>` : ""}`;
+  } else if (it.kind === "phrase") {
+    ask = rec ? "看日语：说出意思和什么时候用" : "看中文：用日语说出来";
+    front = rec ? `<div class="rv-front">${plainRuby(it.ruby || esc(it.front))}</div>` : `<div class="rv-front zh">${esc(it.meaning)}</div>`;
+    back = `<div class="ja-big">${ruby(it.ruby || esc(it.front))}${spk}</div><div>${esc(it.meaning || "")}</div><div class="muted small">${esc(it.use || it.example || "")}</div>`;
+  } else {
+    ask = rec ? "看句型：说出意思，再用它造一个句子" : "看意思：说出句型，再造一个句子";
+    front = rec ? `<div class="rv-front">${esc(it.front)}</div>` : `<div class="rv-front zh">${esc(it.meaning)}</div>`;
+    back = `<div class="ja-big">${esc(it.front)}</div><div>${esc(it.meaning || "")}</div>${it.explain ? `<div class="muted small">${esc(it.explain)}</div>` : ""}
+      ${it.example_ruby ? `<div class="ja-ex">${ruby(it.example_ruby)}${spk}<div class="muted small">${esc(it.example_zh || "")}</div></div>` : it.example ? `<div class="muted">${esc(it.example)}</div>` : ""}`;
+  }
+  const iv = it.intervals || {};
+  $("review-body").innerHTML = reviewHeader() + `
+    <div class="rv-card" id="rv-card" role="button" tabindex="0">
+      <div class="rv-kind"><span>${esc(it.kind_name || "")}${it.source ? ` · ${esc(it.source)}` : ""}${rv.practice ? ' <span class="rv-practice">再练一次（不记录）</span>' : ""}</span><span>第 ${esc(it.stage ?? 0)} 级 · 剩 ${rv.queue.length + 1}</span></div>
+      <div class="rv-ask">${ask}</div>${front}
+      <div class="rv-back hidden">${back}</div>
+      <div class="muted small rv-tap">先在心里（或小声）说出来，再点一下翻面</div>
+    </div>
+    <div class="rv-grade hidden" id="rv-grade">${rv.practice
+      ? '<button class="g-bad" data-r="wrong">还是不会</button><button class="g-mid" data-r="fuzzy">差不多</button><button class="g-ok" data-r="right">会了</button>'
+      : `<button class="g-bad" data-r="wrong">忘记<small>${esc(iv.wrong || "")}</small></button><button class="g-mid" data-r="fuzzy">模糊<small>${esc(iv.fuzzy || "")}</small></button><button class="g-ok" data-r="right">记住<small>${esc(iv.right || "")}</small></button>`}</div>`;
+  const card = $("rv-card");
+  card.addEventListener("click", (e) => {
+    if (e.target.closest(".play-btn")) { e.stopPropagation(); playAudio(it.audio, null, day); return; }
+    if (card.classList.contains("open")) return;
+    card.classList.add("open");
+    card.querySelector(".rv-back").classList.remove("hidden"); card.querySelector(".rv-tap").classList.add("hidden");
+    $("rv-grade").classList.remove("hidden");
+    if (au) playAudio(it.audio, null, day);
+  });
+  document.querySelectorAll("#rv-grade button").forEach((b) => b.addEventListener("click", () => answerReview(b.dataset.r)));
+}
+function answerReview(r) {
+  const it = rv.current; if (!it) return;
+  rv.current = null;
+  if (rv.practice) { if (r === "wrong") rv.queue.push(it); return nextReview(); }
+  rv.tally[r]++;
+  if (r === "wrong") rv.again.push(it);
+  state.ja_review = state.ja_review || {};
+  const id = String(it.id);
+  if (!state.ja_review[id]) state.ja_review[id] = { result: r, direction: it.direction, at: new Date().toISOString() };
+  saveState();
+  nextReview();
+}
+function finishReview() {
+  const s = rv.data.stats || {}, t = rv.tally, doneN = t.right + t.fuzzy + t.wrong;
+  const stages = s.stages || [], max = Math.max(1, ...stages, s.mastered || 0);
+  const bars = [...stages, s.mastered || 0].map((n, i) => `<div class="rv-col"><div style="height:${Math.round(70 * n / max) + 2}px"></div><span>${i < stages.length ? `${i}级` : "掌握"}<br>${n}</span></div>`).join("");
+  const fc = (s.forecast || []).filter((f) => f.n).map((f) => `<div>${esc(f.date.slice(5))}：${f.n} 条</div>`).join("") || "<div>接下来几天没有要复习的</div>";
+  $("review-body").innerHTML = reviewHeader() + `<div class="rv-done">
+    <h2>${doneN ? "今天的日语复习完成了" : "今天没有要复习的"}</h2>
+    <p class="muted">${doneN ? `记住 ${t.right} · 模糊 ${t.fuzzy} · 忘记 ${t.wrong}` : s.next_due ? `下次复习：${esc(s.next_due)}` : ""}</p>
+    <p class="muted small">已学 ${esc(s.learned ?? 0)} 条 · 已掌握 ${esc(s.mastered ?? 0)} 条（推送时的统计）</p>
+    <div class="rv-stages">${bars}</div><div class="muted small rv-fc">${fc}</div>
+    <p class="muted small">结果已存进今天的同步状态，明天推送时自动回到记忆库。</p></div>`;
 }
 
 function toggle(id) {
@@ -513,7 +643,7 @@ function fillSheet(id) {
   $("d-note").value = state.notes[id] || "";
   const go = $("d-link");
   go.classList.toggle("hidden", !q.link);
-  go.textContent = q.link === "ja-recite" ? "去背诵卡片 →" : q.link === "digest" ? "打开每日资讯 →" : "打开今日日语 →";
+  go.textContent = q.link === "ja-recite" ? "去背诵卡片 →" : q.link === "digest" ? "打开每日资讯 →" : q.link === "ja-review" ? "去日语复习 →" : "打开今日日语 →";
   go.onclick = () => gotoLink(q.link);
   const btn = $("d-toggle"); const done = !!state.done[id]; const lock = lockReason(q);
   btn.disabled = !!lock && !done;
@@ -622,8 +752,9 @@ $("d-note").addEventListener("blur", render);
 $("journal").addEventListener("input", (e) => { state.journal = e.target.value; saveState(); });
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === b));
-  for (const name of ["quests", "archive", "ja", "digest"]) $(`tab-${name}`).classList.toggle("hidden", b.dataset.tab !== name);
+  for (const name of ["quests", "archive", "ja", "review", "digest"]) $(`tab-${name}`).classList.toggle("hidden", b.dataset.tab !== name);
   if (b.dataset.tab === "digest") renderDigest();
+  if (b.dataset.tab === "review") renderReview();
   $("archive-list").classList.remove("hidden"); $("archive-view").classList.add("hidden");
   if (b.dataset.tab === "ja") { if ($("ja-date").value !== jaDate) renderJapanese(); } else stopAudio();
 }));
