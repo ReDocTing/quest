@@ -314,3 +314,6 @@ details.dt-card[open] summary { margin-bottom: 8px; }
 html, body { overflow-x: hidden; }
 #main { touch-action: pan-y; }
 .tab-body { will-change: transform, opacity; }
+
+/* 页面本身不允许横向滚动（clip 连脚本滚动也禁止；旧浏览器退回 hidden） */
+html, body { overflow-x: hidden; overflow-x: clip; }

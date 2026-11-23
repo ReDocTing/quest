@@ -743,14 +743,18 @@ function fillDietDates() {
   const t = todayStr();
   if (dates.length) sel.value = dates.includes(t) ? t : (dates.filter((d) => d <= t).pop() || dates[dates.length - 1]);
 }
+const dietCache = {};
 async function renderDietTab() {
   const box = $("diet-body"), d = $("diet-date").value;
   if (!d) { box.innerHTML = '<p class="muted dg-empty">还没有推送过饮食数据。</p>'; return; }
-  box.innerHTML = '<p class="muted">读取中…</p>';
+  const draw = (j) => { box.innerHTML = renderDiet(j) + `<p class="muted small">更新于 ${esc(j.updated || "")}</p>`; box.dataset.shown = `${d}|${j.updated || ""}`; };
+  if (dietCache[d]) { if (box.dataset.shown !== `${d}|${dietCache[d].updated || ""}`) draw(dietCache[d]); }
+  else box.innerHTML = '<p class="muted">读取中…</p>';
   try {
-    const j = await decryptJSON(await fetchText(`data/diet/${d}.json.enc`)); // 每次打开都重新读，饮食一天会更新好几次
-    box.innerHTML = renderDiet(j) + `<p class="muted small">更新于 ${esc(j.updated || "")}</p>`;
-  } catch { box.innerHTML = '<p class="muted">这一天的饮食数据读取失败。</p>'; }
+    const j = await decryptJSON(await fetchText(`data/diet/${d}.json.enc`)); // 饮食一天会更新好几次，每次打开都在后台读一遍
+    dietCache[d] = j;
+    if ($("diet-date").value === d && box.dataset.shown !== `${d}|${j.updated || ""}`) draw(j);
+  } catch { if (!dietCache[d]) box.innerHTML = '<p class="muted">这一天的饮食数据读取失败。</p>'; }
 }
 
 function toggle(id) {
@@ -925,10 +929,16 @@ $("forget").addEventListener("click", () => {
     b.style.transform = "";
     b.style.opacity = "";
   }
+  function centerTab(t) {
+    const bar = document.querySelector(".tabs"), br = bar.getBoundingClientRect(), tr = t.getBoundingClientRect();
+    bar.scrollTo({ left: bar.scrollLeft + (tr.left - br.left) - (br.width - tr.width) / 2, behavior: "smooth" });
+  }
   tabs().forEach((t, i) => t.addEventListener("click", () => {
     const dir = i > idx ? 1 : i < idx ? -1 : 0;
     idx = i;
     enter(dir);
+    centerTab(t);
+    if (window.scrollX) window.scrollTo({ left: 0, top: window.scrollY });
   }));
 
   let sx = 0, sy = 0, t0 = 0, dx = 0, lock = null, cur = null;
@@ -965,9 +975,8 @@ $("forget").addEventListener("click", () => {
       el.style.opacity = "0";
       setTimeout(() => {
         el.style.transition = "none"; el.style.transform = ""; el.style.opacity = "";
-        next.click();                                            // 触发上面的 enter()，新页面滑进来
-        next.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-        window.scrollTo({ top: 0 });
+        next.click();                                            // 触发上面的 enter()，新页面滑进来、标签栏居中
+        window.scrollTo({ top: 0, left: 0 });
       }, 150);
     } else reset(el);
   }
