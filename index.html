@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0f1420">
+<title>每日任务</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 解锁 -->
+  <section id="lock" class="screen hidden">
+    <div class="lock-card">
+      <div class="lock-emblem">⚔</div>
+      <h1>每日任务</h1>
+      <p class="muted">内容已加密，输入密码解锁</p>
+      <form id="lock-form">
+        <input id="acct" type="text" autocomplete="username" placeholder="账号" required>
+        <input id="pw" type="password" autocomplete="current-password" placeholder="密码" required>
+        <p class="muted small">这台设备登录一次后会记住，以后打开不用再输入。</p>
+        <button type="submit" class="btn primary">解锁</button>
+        <p id="lock-err" class="err"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- 主界面 -->
+  <section id="main" class="screen hidden">
+    <header class="top">
+      <div class="top-row">
+        <div>
+          <div id="day-label" class="day-label"></div>
+          <h1 id="day-title"></h1>
+        </div>
+        <button id="open-settings" class="icon-btn" aria-label="设置">⚙</button>
+      </div>
+      <div class="xp">
+        <div class="xp-text"><span id="coin-month"></span><span id="coin-day"></span></div>
+        <div class="bar"><div id="xp-bar"></div></div>
+      </div>
+      <div id="banner" class="banner hidden"></div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="quests">今日任务</button>
+        <button class="tab" data-tab="archive">封存</button>
+      </nav>
+    </header>
+
+    <div id="tab-quests" class="tab-body">
+      <div id="motto" class="motto hidden"></div>
+      <ul id="quest-list" class="quest-list"></ul>
+      <div class="journal">
+        <label for="journal">今日随记</label>
+        <textarea id="journal" rows="3" placeholder="想到什么就写在这里"></textarea>
+      </div>
+    </div>
+
+    <div id="tab-archive" class="tab-body hidden">
+      <ul id="archive-list" class="archive-list"></ul>
+      <div id="archive-view" class="archive-view hidden">
+        <button id="archive-back" class="btn ghost">← 返回</button>
+        <img id="archive-img" alt="封存的完成情况">
+      </div>
+    </div>
+
+    <footer class="sync"><span id="sync-dot" class="dot"></span><span id="sync-text"></span></footer>
+  </section>
+
+  <!-- 任务详情 -->
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel">
+      <div class="sheet-head">
+        <span id="d-type" class="tag"></span>
+        <span id="d-time" class="muted"></span>
+        <button class="icon-btn" data-close aria-label="关闭">✕</button>
+      </div>
+      <h2 id="d-title"></h2>
+      <div id="d-body" class="md"></div>
+      <label for="d-note" class="note-label">补充</label>
+      <textarea id="d-note" rows="3" placeholder="完成情况、感受、遇到的问题……"></textarea>
+      <button id="d-toggle" class="btn primary wide"></button>
+    </div>
+  </div>
+
+  <!-- 设置 -->
+  <div id="settings" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel">
+      <div class="sheet-head"><strong>设置</strong><button class="icon-btn" data-close aria-label="关闭">✕</button></div>
+      <p class="muted small">同步需要一个 GitHub 令牌（fine-grained token，只授权这个仓库的 Contents 读写）。令牌只保存在这台设备的浏览器里。</p>
+      <label for="token">GitHub 令牌</label>
+      <input id="token" type="password" placeholder="github_pat_…" autocomplete="off">
+      <button id="save-token" class="btn primary wide">保存令牌</button>
+      <p id="token-msg" class="small"></p>
+      <hr>
+      <button id="forget" class="btn danger wide">忘记这台设备（清除密码和令牌）</button>
+    </div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
