@@ -187,3 +187,9 @@ rt { font-size: 0.55em; color: var(--muted); }
 .ja-ex { margin-top: 6px; padding: 6px 8px; background: var(--panel-2); border-radius: 8px; }
 .flashcard .tag { margin-bottom: 4px; }
 #d-link { margin-top: 14px; background: #14303a; color: var(--daily); }
+
+/* 强制休息 */
+.quest.locked { opacity: .6; border-left-style: dashed; }
+.quest.locked .check-btn { border-style: dashed; color: var(--muted); font-size: 13px; cursor: not-allowed; }
+.lock-msg { color: var(--train); }
+#d-toggle:disabled { opacity: .7; cursor: not-allowed; }

@@ -191,14 +191,36 @@ function dayLabel(d) {
 }
 
 // ---------- 金币计算 ----------
+// 锁定的任务：推送时标了 locked 的，或者昨天练过健身房（网页上再查一次，防止推送后才勾昨天的）
+let prevGymDone = false;
+function lockReason(q) {
+  if (q.locked) return q.locked;
+  if (q.id === "gym" && prevGymDone) return "昨天练过，今天强制休息";
+  return "";
+}
+async function loadPrevGym() {
+  const d = new Date(day + "T00:00:00"); d.setDate(d.getDate() - 1);
+  const prev = fmt(d);
+  prevGymDone = false;
+  if (!(index.days || []).includes(prev)) return;
+  let remote = null, local = null;
+  if (token()) {
+    try { const r = await gh(`state/${prev}.json.enc?ref=${meta.branch}`); if (r.ok) remote = await decryptJSON(atob((await r.json()).content.replace(/\n/g, ""))); } catch {}
+  } else {
+    try { remote = await decryptJSON(await fetchText(`state/${prev}.json.enc`)); } catch {}
+  }
+  try { const c = store.get(LS.cache + prev); if (c) local = JSON.parse(c); } catch {}
+  const st = newer(remote, local);
+  prevGymDone = !!(st && st.done && st.done.gym);
+}
 function coinStats() {
-  const qs = dayData.quests || [];
+  const qs = (dayData.quests || []).filter((q) => !lockReason(q));
   const dayAll = qs.reduce((s, q) => s + (q.coins || 0), 0);
   const dayGot = qs.filter((q) => state.done[q.id]).reduce((s, q) => s + (q.coins || 0), 0);
   const weekGot = ((index.weeks || {})[mondayOf(day)] || 0) + dayGot;
   const earned = (index.earned || 0) + dayGot;
   const spent = (wallet.spends || []).reduce((s, x) => s + x.amount, 0);
-  return { dayAll, dayGot, weekGot, cap: index.cap || 750, earned, spent, balance: earned - spent };
+  return { dayAll, dayGot, weekGot, earned, spent, balance: earned - spent };
 }
 
 // ---------- 渲染 ----------
@@ -212,26 +234,28 @@ function render() {
   else banner.classList.add("hidden");
 
   const qs = dayData.quests || [];
-  const doneN = qs.filter((q) => state.done[q.id]).length;
+  const active = qs.filter((q) => !lockReason(q));
+  const doneN = active.filter((q) => state.done[q.id]).length;
   const c = coinStats();
   $("wallet-btn").textContent = `🪙 ${c.balance}`;
-  $("coin-week").textContent = `本周 ${c.weekGot} / ${c.cap}`;
-  $("coin-day").textContent = `今日 ${c.dayGot} / ${c.dayAll} · 完成 ${doneN}/${qs.length}`;
-  $("xp-bar").style.width = `${Math.min(100, (c.weekGot / c.cap) * 100)}%`;
+  $("coin-week").textContent = `本周已得 🪙 ${c.weekGot}`;
+  $("coin-day").textContent = `今日 ${c.dayGot} / ${c.dayAll} · 完成 ${doneN}/${active.length}`;
+  $("xp-bar").style.width = c.dayAll ? `${Math.min(100, (c.dayGot / c.dayAll) * 100)}%` : "0";
 
   const ul = $("quest-list"); ul.innerHTML = "";
   for (const q of qs) {
     const tp = TYPE[q.type] || TYPE.daily;
+    const lock = lockReason(q);
     const li = document.createElement("li");
-    li.className = `quest ${tp.cls}${state.done[q.id] ? " done" : ""}`;
+    li.className = `quest ${tp.cls}${state.done[q.id] ? " done" : ""}${lock ? " locked" : ""}`;
     li.innerHTML = `
-      <button class="check-btn" aria-label="完成">${state.done[q.id] ? "✓" : ""}</button>
+      <button class="check-btn" aria-label="${lock ? "强制休息，不能勾选" : "完成"}"${lock ? " disabled" : ""}>${lock ? "休" : state.done[q.id] ? "✓" : ""}</button>
       <div class="q-main">
         <div class="q-meta"><span class="q-type">${tp.name}</span>${q.time ? `<span>推荐 ${esc(q.time)}</span>` : ""}${state.notes[q.id] ? '<span class="q-note">✎ 有补充</span>' : ""}</div>
         <div class="q-title">${esc(q.title)}</div>
-        ${q.summary ? `<div class="q-sum">${esc(q.summary)}</div>` : ""}
+        ${lock ? `<div class="q-sum lock-msg">${esc(lock)}</div>` : q.summary ? `<div class="q-sum">${esc(q.summary)}</div>` : ""}
       </div>
-      <div class="q-xp">+${q.coins || 0} 🪙</div>`;
+      <div class="q-xp">${lock ? "休息" : `+${q.coins || 0} 🪙`}</div>`;
     li.querySelector(".check-btn").addEventListener("click", (e) => { e.stopPropagation(); toggle(q.id); });
     li.addEventListener("click", () => openQuest(q.id));
     ul.appendChild(li);
@@ -371,6 +395,8 @@ async function gotoJapanese(target) {
   else window.scrollTo({ top: 0, behavior: "smooth" });
 }
 function toggle(id) {
+  const q = dayData.quests.find((x) => x.id === id);
+  if (q && lockReason(q) && !state.done[id]) return; // 强制休息日不能勾
   if (state.done[id]) delete state.done[id]; else state.done[id] = new Date().toISOString();
   saveState(); render();
   if (openId === id) fillSheet(id);
@@ -387,9 +413,10 @@ function fillSheet(id) {
   go.classList.toggle("hidden", !q.link);
   go.textContent = q.link === "ja-recite" ? "去背诵卡片 →" : "打开今日日语 →";
   go.onclick = () => gotoJapanese(q.link);
-  const btn = $("d-toggle"); const done = !!state.done[id];
-  btn.textContent = done ? "取消完成" : "完成任务";
-  btn.className = `btn wide ${done ? "" : "primary"}`;
+  const btn = $("d-toggle"); const done = !!state.done[id]; const lock = lockReason(q);
+  btn.disabled = !!lock && !done;
+  btn.textContent = lock && !done ? `🛌 ${lock}` : done ? "取消完成" : "完成任务";
+  btn.className = `btn wide ${done || lock ? "" : "primary"}`;
 }
 function openQuest(id) { openId = id; fillSheet(id); $("sheet").classList.remove("hidden"); }
 function closeSheets() { openId = null; document.querySelectorAll(".sheet").forEach((s) => s.classList.add("hidden")); }
@@ -398,7 +425,7 @@ function closeSheets() { openId = null; document.querySelectorAll(".sheet").forE
 function renderWallet() {
   const c = coinStats();
   $("w-balance").textContent = c.balance;
-  $("w-stats").textContent = `累计获得 ${c.earned} · 累计花费 ${c.spent} · 本周 ${c.weekGot}/${c.cap}`;
+  $("w-stats").textContent = `累计获得 ${c.earned} · 累计花费 ${c.spent} · 本周已得 ${c.weekGot}`;
   const ul = $("w-list"); ul.innerHTML = "";
   if (!wallet.spends.length) { ul.innerHTML = '<li class="muted">还没有花过金币。</li>'; return; }
   for (const s of wallet.spends) {
@@ -456,6 +483,7 @@ async function openDay() {
   if (!day) { $("day-title").textContent = "还没有推送任务"; return; }
   dayData = await decryptJSON(await fetchText(`data/${day}.json.enc`));
   [state, wallet] = await Promise.all([loadState(day), loadWallet()]);
+  await loadPrevGym();
   render(); renderArchive(); fillJaDates();
 }
 async function unlockWith(raw) {
