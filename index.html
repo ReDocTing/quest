@@ -36,7 +36,7 @@
           <h1 id="day-title"></h1>
         </div>
         <div class="top-actions">
-          <button id="wallet-btn" class="coin-chip" aria-label="金币余额，点开记录花费">🪙 0</button>
+          <button id="wallet-btn" class="coin-chip" aria-label="金币余额，点开兑换努力的奖励">🪙 0</button>
           <button id="open-settings" class="icon-btn" aria-label="设置">⚙</button>
         </div>
       </div>
@@ -115,16 +115,16 @@
   <div id="wallet" class="sheet hidden" role="dialog" aria-modal="true">
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel">
-      <div class="sheet-head"><strong>金币</strong><button class="icon-btn" data-close aria-label="关闭">✕</button></div>
+      <div class="sheet-head"><strong>努力的奖励</strong><button class="icon-btn" data-close aria-label="关闭">✕</button></div>
       <div class="w-balance"><span>🪙</span><span id="w-balance">0</span></div>
       <p id="w-stats" class="muted small center"></p>
-      <label for="w-amount">花多少</label>
+      <label for="w-amount">用多少金币</label>
       <input id="w-amount" type="number" inputmode="numeric" min="1" placeholder="例如 200">
-      <label for="w-note">花在哪</label>
+      <label for="w-note">奖励自己什么</label>
       <input id="w-note" type="text" placeholder="奶茶、电影、新耳机……">
-      <button id="w-spend" class="btn primary wide">花掉</button>
+      <button id="w-spend" class="btn primary wide">兑换奖励</button>
       <p id="w-msg" class="small"></p>
-      <label>花费记录</label>
+      <label>兑换过的奖励</label>
       <ul id="w-list" class="spend-list"></ul>
     </div>
   </div>
@@ -145,6 +145,6 @@
   </div>
 
 </div>
-<script src="app.js?v=7e92620719"></script>
+<script src="app.js?v=f4006ae417"></script>
 </body>
 </html>

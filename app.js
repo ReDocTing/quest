@@ -1,7 +1,7 @@
 "use strict";
 // 每日任务：所有数据都是 AES-GCM 加密的，密钥由账号和密码经 PBKDF2 派生。
 // 任务由电脑每天推送（data/日期.json.enc）；勾选和补充写在 state/日期.json.enc，
-// 金币花费记在 wallet.json.enc，都通过 GitHub API 同步。
+// 用金币兑换的“努力的奖励”记在 wallet.json.enc，都通过 GitHub API 同步。
 
 const LS = { key: "quest.key", token: "quest.token", cache: "quest.cache.", wallet: "quest.wallet" };
 const TYPE = {
@@ -784,16 +784,16 @@ function closeSheets() { openId = null; document.querySelectorAll(".sheet").forE
 function renderWallet() {
   const c = coinStats();
   $("w-balance").textContent = c.balance;
-  $("w-stats").textContent = `累计获得 ${c.earned} · 累计花费 ${c.spent} · 本周已得 ${c.weekGot}`;
+  $("w-stats").textContent = `累计获得 ${c.earned} · 已兑换奖励 ${c.spent} · 本周已得 ${c.weekGot}`;
   const ul = $("w-list"); ul.innerHTML = "";
-  if (!wallet.spends.length) { ul.innerHTML = '<li class="muted">还没有花过金币。</li>'; return; }
+  if (!wallet.spends.length) { ul.innerHTML = '<li class="muted">还没有兑换过奖励。好好努力，给自己攒一个！</li>'; return; }
   for (const s of wallet.spends) {
     const li = document.createElement("li");
     const t = new Date(s.at);
     li.innerHTML = `<div><div>${esc(s.note)}</div><div class="muted small">${fmt(t)} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}</div></div>
       <div class="spend-amt">−${s.amount}</div><button class="icon-btn" aria-label="删除这条">✕</button>`;
     li.querySelector("button").addEventListener("click", () => {
-      if (!confirm(`删除“${s.note}”这条记录？金币会退回余额。`)) return;
+      if (!confirm(`删除“${s.note}”这条奖励？金币会退回余额。`)) return;
       wallet.deleted = [...(wallet.deleted || []), s.id];
       wallet.spends = wallet.spends.filter((x) => x.id !== s.id);
       saveWallet(); render(); renderWallet();
@@ -806,10 +806,10 @@ function spend() {
   const note = $("w-note").value.trim();
   const msg = $("w-msg");
   if (!amount || amount <= 0) { msg.textContent = "填一个大于 0 的金额"; return; }
-  if (!note) { msg.textContent = "写一下花在哪"; return; }
-  if (amount > coinStats().balance) { msg.textContent = "余额不够"; return; }
+  if (!note) { msg.textContent = "写一下奖励自己什么"; return; }
+  if (amount > coinStats().balance) { msg.textContent = "金币还不够，再努力一下"; return; }
   wallet.spends.unshift({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, at: new Date().toISOString(), amount, note });
-  $("w-amount").value = ""; $("w-note").value = ""; msg.textContent = `已花掉 ${amount} 金币：${note}`;
+  $("w-amount").value = ""; $("w-note").value = ""; msg.textContent = `已兑换努力的奖励：${note}（−${amount} 金币）`;
   saveWallet(); render(); renderWallet();
 }
 
