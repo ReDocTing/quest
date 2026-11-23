@@ -12,6 +12,11 @@ const TYPE = {
   rest: { name: "作息", cls: "t-rest" },
 };
 const $ = (id) => document.getElementById(id);
+// 浏览器缓存了旧的 index.html、却拿到了新脚本时：强制重新加载一次，避免新标签页一片空白
+if (["diet-date", "review-body", "digest-body"].some((id) => !$(id))) {
+  if (!/[?&]r=/.test(location.search)) location.replace(location.pathname + "?r=" + Date.now());
+  throw new Error("页面版本过旧，正在重新加载");
+}
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
