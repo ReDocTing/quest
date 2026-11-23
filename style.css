@@ -194,3 +194,20 @@ rt { font-size: 0.55em; color: var(--muted); }
 .lock-msg { color: var(--train); }
 #d-toggle:disabled { opacity: .7; cursor: not-allowed; }
 .ja-credits { color: var(--muted); font-size: 12px; margin: 18px 0 8px; line-height: 1.6; }
+
+/* 每日资讯 */
+.tabs .tab { margin-right: 10px; }
+.dg-h { font-size: 16px; color: var(--gold); margin: 18px 0 8px; display: flex; align-items: center; justify-content: space-between; }
+.dg-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 10px 0; }
+.dg-card p { margin: 6px 0; }
+.dg-today { border-color: var(--gold-dim); background: #221d10; }
+.dg-title { font-weight: 700; }
+.dg-title a { color: var(--text); text-decoration: underline; text-decoration-color: var(--gold-dim); }
+.dg-meta { margin-top: 4px; }
+.dg-stars { color: var(--gold); letter-spacing: 1px; }
+.dg-tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--panel-2); color: var(--daily); }
+.dg-links a { font-size: 13px; color: var(--daily); }
+.dg-actions { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
+.dg-want { padding: 6px 12px; font-size: 14px; }
+.dg-want.on { background: var(--side); color: #0f1420; }
+.dg-empty { margin-top: 16px; }

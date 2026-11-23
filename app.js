@@ -399,6 +399,103 @@ async function gotoJapanese(target) {
   if (target === "ja-recite") setTimeout(() => { const el = $("ja-recite"); if (el) el.scrollIntoView({ behavior: "smooth" }); }, 200);
   else window.scrollTo({ top: 0, behavior: "smooth" });
 }
+// ---------- 每日资讯（资讯对话写的 JSON，推送时加密成 data/digest.json.enc，仓库里只有当天的） ----------
+let digestData = null, digestLoaded = false, wishlist = { items: {} };
+const safeUrl = (u) => (typeof u === "string" && /^https?:\/\//.test(u) ? esc(u) : "");
+const extLink = (text, url) => { const u = safeUrl(url); return u ? `<a href="${u}" target="_blank" rel="noopener">${esc(text)}</a>` : esc(text); };
+
+// 想精读：和勾选一样走 GitHub 同步（wishlist.json.enc），按每篇论文最后修改时间合并
+function mergeWish(a, b) {
+  const items = { ...(a.items || {}) };
+  for (const [id, x] of Object.entries(b.items || {})) if (!items[id] || (x.at || "") > (items[id].at || "")) items[id] = x;
+  return { items, updated: new Date().toISOString() };
+}
+async function loadWishlist() {
+  const remote = await readSynced("wishlist.json.enc");
+  let local = null;
+  try { const c = store.get("quest.wish"); if (c) local = JSON.parse(c); } catch {}
+  return mergeWish(remote || {}, local || {});
+}
+function saveWishlist() {
+  store.set("quest.wish", JSON.stringify(wishlist));
+  scheduleWrite("wishlist.json.enc", () => wishlist, (remote) => { wishlist = mergeWish(remote, wishlist); });
+}
+
+async function renderDigest() {
+  const box = $("digest-body");
+  if (!index.digest || index.digest !== todayStr()) {
+    box.innerHTML = '<p class="muted dg-empty">今天的资讯还没生成，以前的在电脑上的 每日资讯/预览.html 里看。</p>';
+    return;
+  }
+  if (!digestLoaded) {
+    box.innerHTML = '<p class="muted">读取中…</p>';
+    try { digestData = await decryptJSON(await fetchText("data/digest.json.enc")); } catch { box.innerHTML = '<p class="muted">资讯读取失败。</p>'; return; }
+    digestLoaded = true;
+  }
+  const g = digestData;
+  const expandAll = store.get("quest.paperExpand") === "1";
+  const papers = g.papers || [];
+  const tr = g.today_read && papers.find((p) => p.id === g.today_read.paper_id);
+  let h = `<div class="ja-head"><h2>每日资讯 ${esc(g.date || "")}（${esc(g.weekday || "")}）</h2><p class="muted small">阅读约 ${esc(g.reading_minutes || 10)} 分钟</p></div>`;
+  if (tr) {
+    h += `<section class="dg-card dg-today"><div class="day-label">今日一读</div><div class="dg-title">${extLink(tr.title, tr.url)}</div><p>${esc(g.today_read.reason || "")}</p></section>`;
+  }
+  if ((g.news || []).length || g.news_note) {
+    h += `<h3 class="dg-h">昨日资讯${g.news_window ? `<span class="muted small">　${esc(g.news_window)}</span>` : ""}</h3>`;
+    h += (g.news || []).map((n) => `<section class="dg-card"><div class="dg-title">${esc(n.title)}${n.date ? `<span class="muted small">　${esc(n.date)}</span>` : ""}</div>
+      <p>${esc(n.summary || "")}</p>${n.why ? `<p class="muted small">${esc(n.why)}</p>` : ""}
+      <div class="dg-links">${(n.sources || []).map((s) => extLink(s.name || "来源", s.url)).join("　")}</div></section>`).join("");
+    if (g.news_note) h += `<p class="muted small">${esc(g.news_note)}</p>`;
+  }
+  if (papers.length || g.papers_note) {
+    h += `<h3 class="dg-h">今日文献<button class="btn ghost small-btn" id="dg-expand-all">${expandAll ? "全部收起" : "全部展开"}</button></h3>`;
+    if (g.papers_note) h += `<p class="muted small">${esc(g.papers_note)}</p>`;
+    h += papers.map((p) => {
+      const want = !!(wishlist.items[p.id] && wishlist.items[p.id].on);
+      const meta = [
+        `<span class="dg-stars">${"★".repeat(p.stars || 0)}${"☆".repeat(Math.max(0, 3 - (p.stars || 0)))}</span>`,
+        p.setting ? esc(p.setting) : "",
+        p.code_url ? extLink("代码", p.code_url) : `代码：${esc(p.code || "未提及")}`,
+        p.project_url ? extLink("项目页", p.project_url) : "",
+        p.in_my_list ? '<span class="dg-tag">已在论文清单</span>' : "",
+      ].filter(Boolean).join(" · ");
+      return `<section class="dg-card" data-id="${esc(p.id || "")}"><div class="dg-title">${extLink(p.title, p.url)}</div>
+        <div class="muted small dg-meta">${meta}</div>
+        <p>${esc(p.one_line || "")}</p><p class="muted small">${esc(p.relevance || "")}</p>
+        <div class="dg-more${expandAll ? "" : " hidden"}"><p><strong>问题</strong>　${esc(p.problem || "")}</p><p><strong>方法</strong>　${esc(p.method || "")}</p><p><strong>结果</strong>　${esc(p.result || "")}</p></div>
+        <div class="dg-actions"><button class="btn ghost small-btn dg-toggle">${expandAll ? "收起" : "展开"}</button>
+        <button class="btn small-btn dg-want${want ? " on" : ""}">${want ? "✓ 想精读" : "想精读"}</button></div></section>`;
+    }).join("");
+  }
+  if ((g.picks || []).length) {
+    h += `<h3 class="dg-h">方向相关</h3>` + g.picks.map((k) => `<section class="dg-card"><div class="muted small"><span class="dg-tag">${esc(k.kind || "其他")}</span>${k.date ? `　${esc(k.date)}` : ""}</div>
+      <div class="dg-title">${extLink(k.title, k.url)}</div><p>${esc(k.summary || "")}</p>${k.why ? `<p class="muted small">${esc(k.why)}</p>` : ""}</section>`).join("");
+  }
+  box.innerHTML = h;
+  box.querySelectorAll(".dg-toggle").forEach((b) => b.addEventListener("click", () => {
+    const more = b.closest(".dg-card").querySelector(".dg-more");
+    more.classList.toggle("hidden"); b.textContent = more.classList.contains("hidden") ? "展开" : "收起";
+  }));
+  const all = $("dg-expand-all");
+  if (all) all.addEventListener("click", () => { store.set("quest.paperExpand", expandAll ? "0" : "1"); renderDigest(); });
+  box.querySelectorAll(".dg-want").forEach((b) => b.addEventListener("click", () => {
+    const id = b.closest(".dg-card").dataset.id; const p = papers.find((x) => x.id === id); if (!p) return;
+    const on = !(wishlist.items[id] && wishlist.items[id].on);
+    wishlist.items[id] = { id, title: p.title, url: p.url, from: g.date, on, at: new Date().toISOString() };
+    b.classList.toggle("on", on); b.textContent = on ? "✓ 想精读" : "想精读";
+    saveWishlist();
+  }));
+}
+
+// 从任务的按钮跳到别的页面：ja / ja-recite / digest
+function gotoLink(link) {
+  if (link === "digest") {
+    closeSheets();
+    document.querySelector('.tab[data-tab="digest"]').click();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } else gotoJapanese(link);
+}
+
 function toggle(id) {
   const q = dayData.quests.find((x) => x.id === id);
   if (q && lockReason(q) && !state.done[id]) return; // 强制休息日不能勾
@@ -416,8 +513,8 @@ function fillSheet(id) {
   $("d-note").value = state.notes[id] || "";
   const go = $("d-link");
   go.classList.toggle("hidden", !q.link);
-  go.textContent = q.link === "ja-recite" ? "去背诵卡片 →" : "打开今日日语 →";
-  go.onclick = () => gotoJapanese(q.link);
+  go.textContent = q.link === "ja-recite" ? "去背诵卡片 →" : q.link === "digest" ? "打开每日资讯 →" : "打开今日日语 →";
+  go.onclick = () => gotoLink(q.link);
   const btn = $("d-toggle"); const done = !!state.done[id]; const lock = lockReason(q);
   btn.disabled = !!lock && !done;
   btn.textContent = lock && !done ? `🛌 ${lock}` : done ? "取消完成" : "完成任务";
@@ -487,7 +584,7 @@ async function openDay() {
   day = days.includes(t) ? t : (days.filter((d) => d <= t).pop() || days[days.length - 1]);
   if (!day) { $("day-title").textContent = "还没有推送任务"; return; }
   dayData = await decryptJSON(await fetchText(`data/${day}.json.enc`));
-  [state, wallet] = await Promise.all([loadState(day), loadWallet()]);
+  [state, wallet, wishlist] = await Promise.all([loadState(day), loadWallet(), loadWishlist()]);
   await loadPrevGym();
   render(); renderArchive(); fillJaDates();
 }
@@ -525,7 +622,8 @@ $("d-note").addEventListener("blur", render);
 $("journal").addEventListener("input", (e) => { state.journal = e.target.value; saveState(); });
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === b));
-  for (const name of ["quests", "archive", "ja"]) $(`tab-${name}`).classList.toggle("hidden", b.dataset.tab !== name);
+  for (const name of ["quests", "archive", "ja", "digest"]) $(`tab-${name}`).classList.toggle("hidden", b.dataset.tab !== name);
+  if (b.dataset.tab === "digest") renderDigest();
   $("archive-list").classList.remove("hidden"); $("archive-view").classList.add("hidden");
   if (b.dataset.tab === "ja") { if ($("ja-date").value !== jaDate) renderJapanese(); } else stopAudio();
 }));
@@ -543,7 +641,7 @@ $("save-token").addEventListener("click", async () => {
   if (r && r.ok) { [state, wallet] = await Promise.all([loadState(day), loadWallet()]); render(); }
 });
 $("forget").addEventListener("click", () => {
-  [LS.key, LS.token, LS.wallet].forEach(store.del);
+  [LS.key, LS.token, LS.wallet, "quest.wish"].forEach(store.del);
   try { Object.keys(localStorage).filter((k) => k.startsWith(LS.cache)).forEach((k) => localStorage.removeItem(k)); } catch {}
   location.reload();
 });
