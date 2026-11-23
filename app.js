@@ -242,8 +242,8 @@ function render() {
   const active = qs.filter((q) => !lockReason(q));
   const doneN = active.filter((q) => state.done[q.id]).length;
   const c = coinStats();
-  $("wallet-btn").textContent = `🪙 ${c.balance}`;
-  $("coin-week").textContent = `本周已得 🪙 ${c.weekGot}`;
+  $("wallet-btn").innerHTML = `<i class="coin" aria-hidden="true"></i>${c.balance}`;
+  $("coin-week").innerHTML = `本周已得 <i class="coin" aria-hidden="true"></i>${c.weekGot}`;
   $("coin-day").textContent = `今日 ${c.dayGot} / ${c.dayAll} · 完成 ${doneN}/${active.length}`;
   $("xp-bar").style.width = c.dayAll ? `${Math.min(100, (c.dayGot / c.dayAll) * 100)}%` : "0";
 
@@ -260,7 +260,7 @@ function render() {
         <div class="q-title">${esc(q.title)}</div>
         ${lock ? `<div class="q-sum lock-msg">${esc(lock)}</div>` : q.summary ? `<div class="q-sum">${esc(q.summary)}</div>` : ""}
       </div>
-      <div class="q-xp">${lock ? "休息" : `+${q.coins || 0} 🪙`}</div>`;
+      <div class="q-xp">${lock ? "休息" : `+${q.coins || 0} <i class="coin" aria-hidden="true"></i>`}</div>`;
     li.querySelector(".check-btn").addEventListener("click", (e) => { e.stopPropagation(); toggle(q.id); });
     li.addEventListener("click", () => openQuest(q.id));
     ul.appendChild(li);
@@ -820,7 +820,7 @@ function renderArchive() {
   if (!list.length) { ul.innerHTML = '<li class="muted">还没有封存的日子。每天推送新任务时，前一天会自动封存成图片。</li>'; return; }
   for (const a of list) {
     const li = document.createElement("li");
-    li.innerHTML = `<span>${esc(dayLabel(a.date))}</span><span class="muted">${a.coins != null ? `🪙 ${a.coins} · ` : ""}完成 ${a.rate}%</span>`;
+    li.innerHTML = `<span>${esc(dayLabel(a.date))}</span><span class="muted">${a.coins != null ? `<i class="coin" aria-hidden="true"></i>${a.coins} · ` : ""}完成 ${a.rate}%</span>`;
     li.addEventListener("click", () => showArchive(a.date));
     ul.appendChild(li);
   }
@@ -905,4 +905,27 @@ $("forget").addEventListener("click", () => {
   try { Object.keys(localStorage).filter((k) => k.startsWith(LS.cache)).forEach((k) => localStorage.removeItem(k)); } catch {}
   location.reload();
 });
+
+// ---------- 左右滑动切换标签 ----------
+(() => {
+  let sx = 0, sy = 0, st = 0, ok = false;
+  const main = $("main");
+  main.addEventListener("touchstart", (e) => {
+    const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now();
+    ok = e.touches.length === 1 && !e.target.closest(".tabs, .flashcard, .rv-card, input, textarea, select, svg, table");
+  }, { passive: true });
+  main.addEventListener("touchend", (e) => {
+    if (!ok || document.querySelector(".sheet:not(.hidden)")) return;
+    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - st > 700) return;
+    const tabs = [...document.querySelectorAll(".tab")];
+    const i = tabs.findIndex((b) => b.classList.contains("active"));
+    const next = tabs[i + (dx < 0 ? 1 : -1)];
+    if (!next) return;
+    next.click();
+    next.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    window.scrollTo({ top: 0 });
+  }, { passive: true });
+})();
+
 boot().catch((e) => { document.body.innerHTML = `<p style="padding:24px;color:#ff6b6b">加载失败：${esc(String(e.message || e))}</p>`; });

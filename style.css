@@ -295,3 +295,17 @@ rt { font-size: 0.55em; color: var(--muted); }
 .dt-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 details.dt-card summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 15px; }
 details.dt-card[open] summary { margin-bottom: 8px; }
+
+/* 手机：打勾的圆圈保持正圆（去掉浏览器给按钮加的默认内边距和外观） */
+.check-btn { -webkit-appearance: none; appearance: none; padding: 0; margin: 0; min-width: 30px; min-height: 30px;
+  aspect-ratio: 1 / 1; box-sizing: border-box; line-height: 1; flex: 0 0 30px; }
+
+/* 金币：用 CSS 画的金色硬币，不用表情符号（有的手机会画成银币） */
+.coin { display: inline-block; width: 1em; height: 1em; border-radius: 50%; vertical-align: -0.15em; margin-right: .25em;
+  background: radial-gradient(circle at 35% 30%, #fff3c4 0 12%, #ffd75e 13% 45%, #e9a91e 46% 70%, #b77a0b 71% 100%);
+  box-shadow: inset 0 0 0 .08em #9a6508, 0 0 0 .04em rgba(0,0,0,.25); }
+.coin.big { width: .9em; height: .9em; margin-right: .15em; }
+.coin-chip { display: inline-flex; align-items: center; }
+.q-xp { display: inline-flex; align-items: center; gap: 2px; }
+.q-xp .coin { margin-right: 0; margin-left: .2em; }
+.w-balance { align-items: center; }

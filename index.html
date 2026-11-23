@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0f1420">
 <title>每日任务</title>
-<link rel="stylesheet" href="style.css?v=d4707c9e26">
+<link rel="stylesheet" href="style.css?v=5b5fa9fa94">
 </head>
 <body>
 <div id="app">
@@ -36,7 +36,7 @@
           <h1 id="day-title"></h1>
         </div>
         <div class="top-actions">
-          <button id="wallet-btn" class="coin-chip" aria-label="金币余额，点开兑换努力的奖励">🪙 0</button>
+          <button id="wallet-btn" class="coin-chip" aria-label="金币余额，点开兑换努力的奖励"><i class="coin" aria-hidden="true"></i>0</button>
           <button id="open-settings" class="icon-btn" aria-label="设置">⚙</button>
         </div>
       </div>
@@ -116,7 +116,7 @@
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel">
       <div class="sheet-head"><strong>努力的奖励</strong><button class="icon-btn" data-close aria-label="关闭">✕</button></div>
-      <div class="w-balance"><span>🪙</span><span id="w-balance">0</span></div>
+      <div class="w-balance"><i class="coin big" aria-hidden="true"></i><span id="w-balance">0</span></div>
       <p id="w-stats" class="muted small center"></p>
       <label for="w-amount">用多少金币</label>
       <input id="w-amount" type="number" inputmode="numeric" min="1" placeholder="例如 200">
@@ -145,6 +145,6 @@
   </div>
 
 </div>
-<script src="app.js?v=f4006ae417"></script>
+<script src="app.js?v=1df0743570"></script>
 </body>
 </html>
