@@ -906,26 +906,73 @@ $("forget").addEventListener("click", () => {
   location.reload();
 });
 
-// ---------- 左右滑动切换标签 ----------
+// ---------- 左右滑动切换标签：页面跟手移动，松手后滑出 / 滑入，不够距离就弹回 ----------
 (() => {
-  let sx = 0, sy = 0, st = 0, ok = false;
   const main = $("main");
+  const tabs = () => [...document.querySelectorAll(".tab")];
+  const shown = () => document.querySelector(".tab-body:not(.hidden)");
+  const EASE = "cubic-bezier(.2,.8,.2,1)";
+  let idx = Math.max(0, tabs().findIndex((b) => b.classList.contains("active")));
+
+  // 新页面从滑动方向的另一侧滑进来（点标签和滑动都用）
+  function enter(dir) {
+    const b = shown(); if (!b || !dir) return;
+    b.style.transition = "none";
+    b.style.transform = `translateX(${dir * 28}%)`;
+    b.style.opacity = "0";
+    b.getBoundingClientRect(); // 让浏览器先应用起始位置
+    b.style.transition = `transform .28s ${EASE}, opacity .22s ease-out`;
+    b.style.transform = "";
+    b.style.opacity = "";
+  }
+  tabs().forEach((t, i) => t.addEventListener("click", () => {
+    const dir = i > idx ? 1 : i < idx ? -1 : 0;
+    idx = i;
+    enter(dir);
+  }));
+
+  let sx = 0, sy = 0, t0 = 0, dx = 0, lock = null, cur = null;
+  const reset = (el) => { el.style.transition = `transform .3s ${EASE}, opacity .3s`; el.style.transform = ""; el.style.opacity = ""; };
   main.addEventListener("touchstart", (e) => {
-    const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now();
-    ok = e.touches.length === 1 && !e.target.closest(".tabs, .flashcard, .rv-card, input, textarea, select, svg, table");
+    lock = null; cur = null; dx = 0;
+    if (e.touches.length !== 1 || document.querySelector(".sheet:not(.hidden)") ||
+        e.target.closest(".tabs, .flashcard, .rv-card, input, textarea, select, svg, table")) { lock = "no"; return; }
+    const t = e.touches[0]; sx = t.clientX; sy = t.clientY; t0 = Date.now(); cur = shown();
   }, { passive: true });
-  main.addEventListener("touchend", (e) => {
-    if (!ok || document.querySelector(".sheet:not(.hidden)")) return;
-    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
-    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - st > 700) return;
-    const tabs = [...document.querySelectorAll(".tab")];
-    const i = tabs.findIndex((b) => b.classList.contains("active"));
-    const next = tabs[i + (dx < 0 ? 1 : -1)];
-    if (!next) return;
-    next.click();
-    next.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-    window.scrollTo({ top: 0 });
+  main.addEventListener("touchmove", (e) => {
+    if (lock === "no" || !cur) return;
+    const t = e.touches[0], mx = t.clientX - sx, my = t.clientY - sy;
+    if (!lock) {
+      if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+      lock = Math.abs(mx) > Math.abs(my) * 1.2 ? "h" : "no";   // 先判断是横滑还是竖着滚动
+      if (lock === "no") return;
+      cur.style.transition = "none";
+    }
+    const n = tabs().length;
+    const edge = (mx > 0 && idx === 0) || (mx < 0 && idx === n - 1);
+    dx = edge ? mx * 0.25 : mx;                                   // 第一个 / 最后一个标签：有阻力
+    cur.style.transform = `translateX(${dx}px)`;
+    cur.style.opacity = String(1 - Math.min(0.45, Math.abs(dx) / 700));
   }, { passive: true });
+  function end() {
+    if (lock !== "h" || !cur) { lock = null; return; }
+    const el = cur, w = main.clientWidth, speed = Math.abs(dx) / Math.max(1, Date.now() - t0);
+    const next = tabs()[idx + (dx < 0 ? 1 : -1)];
+    lock = null; cur = null;
+    if (next && (Math.abs(dx) > w * 0.22 || (speed > 0.45 && Math.abs(dx) > 30))) {
+      el.style.transition = "transform .16s ease-in, opacity .16s ease-in";
+      el.style.transform = `translateX(${dx < 0 ? -w * 0.45 : w * 0.45}px)`;
+      el.style.opacity = "0";
+      setTimeout(() => {
+        el.style.transition = "none"; el.style.transform = ""; el.style.opacity = "";
+        next.click();                                            // 触发上面的 enter()，新页面滑进来
+        next.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+        window.scrollTo({ top: 0 });
+      }, 150);
+    } else reset(el);
+  }
+  main.addEventListener("touchend", end, { passive: true });
+  main.addEventListener("touchcancel", () => { if (cur) reset(cur); lock = null; cur = null; }, { passive: true });
 })();
 
 boot().catch((e) => { document.body.innerHTML = `<p style="padding:24px;color:#ff6b6b">加载失败：${esc(String(e.message || e))}</p>`; });

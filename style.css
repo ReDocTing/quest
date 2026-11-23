@@ -309,3 +309,8 @@ details.dt-card[open] summary { margin-bottom: 8px; }
 .q-xp { display: inline-flex; align-items: center; gap: 2px; }
 .q-xp .coin { margin-right: 0; margin-left: .2em; }
 .w-balance { align-items: center; }
+
+/* 滑动切换：竖向滚动交给浏览器，横向由脚本处理；动画时不出现横向滚动条 */
+html, body { overflow-x: hidden; }
+#main { touch-action: pan-y; }
+.tab-body { will-change: transform, opacity; }
