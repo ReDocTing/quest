@@ -237,14 +237,85 @@ function render() {
     ul.appendChild(li);
   }
   if (document.activeElement !== $("journal")) $("journal").value = state.journal || "";
-  renderJapanese();
   if (!$("wallet").classList.contains("hidden")) renderWallet();
 }
-function renderJapanese() {
-  const ja = dayData.japanese;
-  $("ja-body").innerHTML = ja && ja.md
-    ? md(ja.md)
-    : '<p class="muted">今天的日语教材还没生成。另一个对话生成后，重新推送一次就会出现在这里。</p>';
+// ---------- 今日日语（数据来自日语对话写的 JSON，推送时加密成 data/ja/日期.json.enc） ----------
+const jaCache = {};
+let jaCards = [], jaCardIdx = 0, jaCardFlip = false, jaZhFront = false;
+function fillJaDates() {
+  const dates = [...(index.ja || [])].sort();
+  const sel = $("ja-date"); sel.innerHTML = "";
+  if (!dates.length) { $("ja-body").innerHTML = '<p class="muted">还没有推送过日语讲义。</p>'; return; }
+  for (const d of [...dates].reverse()) {
+    const o = document.createElement("option"); o.value = d; o.textContent = dayLabel(d); sel.appendChild(o);
+  }
+  sel.value = dates.includes(day) ? day : (dates.filter((d) => d <= day).pop() || dates[dates.length - 1]);
+}
+async function renderJapanese() {
+  const d = $("ja-date").value; if (!d) return;
+  const box = $("ja-body");
+  try {
+    if (!jaCache[d]) { box.innerHTML = '<p class="muted">读取中…</p>'; jaCache[d] = await decryptJSON(await fetchText(`data/ja/${d}.json.enc`)); }
+  } catch { box.innerHTML = '<p class="muted">这一天的讲义读取失败。</p>'; return; }
+  const j = jaCache[d];
+  const sec = (title, inner) => inner ? `<section class="ja-sec"><h3>${title}</h3>${inner}</section>` : "";
+  let h = `<div class="ja-head"><div class="day-label">第 ${esc(j.week || "")} 周 · ${esc(j.weekday || "")}${j.week_title ? ` · ${esc(j.week_title)}` : ""}</div><h2>${inline(j.title || "今日日语")}</h2></div>`;
+  if ((j.expressions || []).length) {
+    h += sec("今天的表达", j.expressions.map((e) => `<div class="ja-expr"><div class="ja-big">${inline(e.ja)}${e.srs ? ' <span class="ja-star" title="核心表达">★</span>' : ""}</div><div>${inline(e.zh || "")}</div>${e.use ? `<div class="muted small">${inline(e.use)}</div>` : ""}</div>`).join(""));
+  }
+  if (j.extra) h += `<p class="ja-extra">另外记住：${inline(j.extra)}</p>`;
+  if (j.dialogue && (j.dialogue.lines || []).length) {
+    h += sec("对话", `${j.dialogue.scene ? `<p class="muted small">${inline(j.dialogue.scene)}</p>` : ""}
+      <button class="btn ghost small-btn" id="ja-zh-all">显示全部翻译</button>
+      ${j.dialogue.lines.map((l) => `<div class="ja-line"><span class="ja-who">${esc(l.who || "")}</span><div><div>${inline(l.ja)}</div><div class="ja-zh hidden">${inline(l.zh || "")}</div></div></div>`).join("")}
+      <p class="muted small">点一句可以看这一句的翻译。</p>`);
+  }
+  if ((j.vocab || []).length) {
+    h += sec("生词", j.vocab.map((v) => `<div class="ja-vocab"><div><strong>${esc(v.word)}</strong>${v.reading && v.reading !== v.word ? `<span class="muted">（${esc(v.reading)}）</span>` : ""}　${inline(v.meaning || "")}</div>${v.example ? `<div class="small">${inline(v.example)}</div><div class="muted small">${inline(v.example_zh || "")}</div>` : ""}</div>`).join(""));
+  }
+  if ((j.notes || []).length) h += sec("说明", `<ul>${j.notes.map((n) => `<li>${inline(n)}</li>`).join("")}</ul>`);
+  if ((j.quiz || []).length) h += sec("小测", `<ol>${j.quiz.map((q) => `<li>${inline(q.q)}<details><summary>看答案</summary>${inline(q.a)}</details></li>`).join("")}</ol>`);
+  if (j.mission) h += sec("实战任务", `<p>${inline(j.mission)}</p>`);
+  if (j.output) h += sec("1 分钟输出", `<p>${inline(j.output)}</p>`);
+  if ((j.review_of || []).length) h += `<p class="muted small">复习范围：${j.review_of.map(esc).join("、")}</p>`;
+  const r = j.recite || {};
+  jaCards = [
+    ...(r.words || []).map((w) => ({ ja: w.word, back: `${w.reading && w.reading !== w.word ? `<div class="muted">${esc(w.reading)}</div>` : ""}<div class="ja-big">${inline(w.meaning || "")}</div>${w.example ? `<div class="small">${inline(w.example)}</div><div class="muted small">${inline(w.example_zh || "")}</div>` : ""}`, zh: w.meaning || "" })),
+    ...(r.phrases || []).map((p) => ({ ja: p.ja, back: `<div class="ja-big">${inline(p.zh || "")}</div>`, zh: p.zh || "" })),
+  ];
+  if (jaCards.length) {
+    h += sec(`本日背诵（${jaCards.length} 张）`, `${r.how ? `<p class="muted small">${inline(r.how)}</p>` : ""}
+      <div class="card-tools"><button class="btn ghost small-btn" id="card-dir"></button><span id="card-count" class="muted small"></span></div>
+      <div id="card" class="flashcard" role="button" tabindex="0"></div>
+      <div class="card-nav"><button class="btn" id="card-prev">← 上一张</button><button class="btn" id="card-next">下一张 →</button></div>`);
+  }
+  box.innerHTML = h;
+  const all = $("ja-zh-all");
+  if (all) all.addEventListener("click", () => {
+    const show = all.textContent.startsWith("显示");
+    box.querySelectorAll(".ja-zh").forEach((z) => z.classList.toggle("hidden", !show));
+    all.textContent = show ? "隐藏全部翻译" : "显示全部翻译";
+  });
+  box.querySelectorAll(".ja-line").forEach((ln) => ln.addEventListener("click", () => ln.querySelector(".ja-zh").classList.toggle("hidden")));
+  if (jaCards.length) {
+    jaCardIdx = 0; jaCardFlip = false; drawCard();
+    $("card").addEventListener("click", () => { jaCardFlip = !jaCardFlip; drawCard(); });
+    $("card").addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); jaCardFlip = !jaCardFlip; drawCard(); } });
+    $("card-prev").addEventListener("click", () => { jaCardIdx = (jaCardIdx - 1 + jaCards.length) % jaCards.length; jaCardFlip = false; drawCard(); });
+    $("card-next").addEventListener("click", () => { jaCardIdx = (jaCardIdx + 1) % jaCards.length; jaCardFlip = false; drawCard(); });
+    $("card-dir").addEventListener("click", () => { jaZhFront = !jaZhFront; jaCardFlip = false; drawCard(); });
+  }
+}
+function drawCard() {
+  const c = jaCards[jaCardIdx];
+  const jaFace = `<div class="ja-card-front">${inline(c.ja)}</div>`;
+  const zhFace = `<div class="ja-card-front">${inline(c.zh)}</div>`;
+  const front = jaZhFront ? zhFace : jaFace;
+  const back = jaZhFront ? `<div class="ja-card-front">${inline(c.ja)}</div>${c.back}` : c.back;
+  $("card").innerHTML = jaCardFlip ? back : `${front}<div class="muted small">点一下翻面</div>`;
+  $("card").classList.toggle("flipped", jaCardFlip);
+  $("card-count").textContent = `${jaCardIdx + 1} / ${jaCards.length}`;
+  $("card-dir").textContent = jaZhFront ? "改成正面日语" : "改成正面中文";
 }
 function toggle(id) {
   if (state.done[id]) delete state.done[id]; else state.done[id] = new Date().toISOString();
@@ -328,7 +399,7 @@ async function openDay() {
   if (!day) { $("day-title").textContent = "还没有推送任务"; return; }
   dayData = await decryptJSON(await fetchText(`data/${day}.json.enc`));
   [state, wallet] = await Promise.all([loadState(day), loadWallet()]);
-  render(); renderArchive();
+  render(); renderArchive(); fillJaDates();
 }
 async function unlockWith(raw) {
   key = await importKey(raw);
@@ -366,7 +437,9 @@ document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () 
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === b));
   for (const name of ["quests", "archive", "ja"]) $(`tab-${name}`).classList.toggle("hidden", b.dataset.tab !== name);
   $("archive-list").classList.remove("hidden"); $("archive-view").classList.add("hidden");
+  if (b.dataset.tab === "ja") renderJapanese();
 }));
+$("ja-date").addEventListener("change", renderJapanese);
 $("archive-back").addEventListener("click", () => { $("archive-list").classList.remove("hidden"); $("archive-view").classList.add("hidden"); });
 $("wallet-btn").addEventListener("click", () => { $("w-msg").textContent = ""; renderWallet(); $("wallet").classList.remove("hidden"); });
 $("w-spend").addEventListener("click", spend);
