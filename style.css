@@ -193,3 +193,4 @@ rt { font-size: 0.55em; color: var(--muted); }
 .quest.locked .check-btn { border-style: dashed; color: var(--muted); font-size: 13px; cursor: not-allowed; }
 .lock-msg { color: var(--train); }
 #d-toggle:disabled { opacity: .7; cursor: not-allowed; }
+.ja-credits { color: var(--muted); font-size: 12px; margin: 18px 0 8px; line-height: 1.6; }

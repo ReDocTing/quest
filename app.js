@@ -356,6 +356,11 @@ async function renderJapanese() {
       <div id="card" class="flashcard" role="button" tabindex="0"></div>
       <div class="card-nav"><button class="btn" id="card-prev">← 上一张</button><button class="btn" id="card-next">下一张 →</button></div>`, "ja-recite");
   }
+  // 语音出处：按各声音的使用条款，页面底部要显示 voice_credits
+  const cast = Object.entries(j.cast_today || {}).map(([who, c]) => `${esc(who)}：${esc(c.voice || "")}${c.speed ? `（${c.speed} 倍速）` : ""}`);
+  if ((j.voice_credits || []).length || cast.length) {
+    h += `<p class="ja-credits">${cast.length ? `今天的声音：${cast.join("、")}<br>` : ""}${(j.voice_credits || []).length ? `语音：${j.voice_credits.map(esc).join("、")}` : ""}</p>`;
+  }
   box.innerHTML = h;
   box.querySelectorAll("[data-audio]").forEach((el) => el.addEventListener("click", (e) => { e.stopPropagation(); playAudio(el.dataset.audio, el); }));
   box.querySelectorAll(".zh-btn").forEach((b) => b.addEventListener("click", () => b.parentElement.querySelector(".ja-zh").classList.toggle("hidden")));
