@@ -70,7 +70,7 @@
     </div>
 
     <div id="tab-ja" class="tab-body hidden">
-      <div class="ja-bar"><label for="ja-date">讲义日期</label><select id="ja-date"></select></div>
+      <div class="ja-bar"><select id="ja-date" aria-label="讲义日期"></select><button id="kana-btn" class="btn kana-btn">假名：显示</button></div>
       <div id="ja-body" class="ja"></div>
     </div>
 
@@ -89,6 +89,7 @@
       <h2 id="d-title"></h2>
       <div id="d-body" class="md"></div>
       <label for="d-note" class="note-label">补充</label>
+      <button id="d-link" class="btn wide hidden"></button>
       <textarea id="d-note" rows="3" placeholder="完成情况、感受、遇到的问题……"></textarea>
       <button id="d-toggle" class="btn primary wide"></button>
     </div>

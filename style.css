@@ -170,3 +170,20 @@ input[type=number] { width: 100%; background: var(--bg); color: var(--text); bor
 .ja-card-front { font-size: 24px; font-weight: 700; }
 .card-nav { display: flex; gap: 10px; }
 .card-nav .btn { flex: 1; }
+
+/* 注音、发音、文法 */
+.hide-rt rt { visibility: hidden; }
+rt { font-size: 0.55em; color: var(--muted); }
+.kana-btn { padding: 9px 12px; font-size: 14px; white-space: nowrap; }
+.tap { cursor: pointer; border-radius: 6px; }
+.tap:active { background: var(--panel-2); }
+.playing { background: #1d3340; outline: 1px solid var(--daily); }
+.spk { font-size: 13px; opacity: .7; }
+.ja-line-main { flex: 1; min-width: 0; }
+.zh-btn { flex: none; align-self: flex-start; background: var(--panel-2); color: var(--muted); border: 0; border-radius: 6px; padding: 2px 8px; font-size: 13px; cursor: pointer; }
+.ja-line { cursor: default; }
+.ja-gram { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ja-gram:last-child { border-bottom: 0; }
+.ja-ex { margin-top: 6px; padding: 6px 8px; background: var(--panel-2); border-radius: 8px; }
+.flashcard .tag { margin-bottom: 4px; }
+#d-link { margin-top: 14px; background: #14303a; color: var(--daily); }

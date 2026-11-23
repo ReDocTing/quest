@@ -239,83 +239,136 @@ function render() {
   if (document.activeElement !== $("journal")) $("journal").value = state.journal || "";
   if (!$("wallet").classList.contains("hidden")) renderWallet();
 }
-// ---------- 今日日语（数据来自日语对话写的 JSON，推送时加密成 data/ja/日期.json.enc） ----------
+// ---------- 今日日语（日语对话写的 JSON，推送时加密成 data/ja/日期.json.enc；当天的语音在 data/ja-audio/日期/） ----------
 const jaCache = {};
-let jaCards = [], jaCardIdx = 0, jaCardFlip = false, jaZhFront = false;
+const audioUrls = {};
+let jaDate = null, jaCards = [], jaCardIdx = 0, jaCardFlip = false, jaZhFront = false, curAudio = null, curAudioEl = null;
+// *_ruby 只允许 <ruby> <rt> <b>：先整体转义，再放回这三个标签
+function ruby(s) { return esc(s || "").replace(/&lt;(\/?)(ruby|rt|b)&gt;/g, "<$1$2>"); }
+function setKana(show) {
+  document.body.classList.toggle("hide-rt", !show);
+  store.set("quest.kana", show ? "1" : "0");
+  const b = $("kana-btn"); if (b) b.textContent = show ? "假名：显示" : "假名：隐藏";
+}
 function fillJaDates() {
   const dates = [...(index.ja || [])].sort();
   const sel = $("ja-date"); sel.innerHTML = "";
+  setKana(store.get("quest.kana") !== "0");
   if (!dates.length) { $("ja-body").innerHTML = '<p class="muted">还没有推送过日语讲义。</p>'; return; }
   for (const d of [...dates].reverse()) {
     const o = document.createElement("option"); o.value = d; o.textContent = dayLabel(d); sel.appendChild(o);
   }
   sel.value = dates.includes(day) ? day : (dates.filter((d) => d <= day).pop() || dates[dates.length - 1]);
 }
+const hasAudio = () => index.ja_audio && index.ja_audio === jaDate;
+function stopAudio() {
+  if (curAudio) { curAudio.pause(); curAudio = null; }
+  if (curAudioEl) { curAudioEl.classList.remove("playing"); curAudioEl = null; }
+}
+async function playAudio(file, el) {
+  if (!file || !hasAudio()) return;
+  if (curAudioEl === el && curAudio) { stopAudio(); return; } // 再点一下停止
+  stopAudio();
+  try {
+    const k = `${jaDate}/${file}`;
+    if (!audioUrls[k]) {
+      const bytes = await decryptBytes(await fetchText(`data/ja-audio/${jaDate}/${file}.enc`));
+      audioUrls[k] = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+    }
+    curAudio = new Audio(audioUrls[k]); curAudioEl = el || null;
+    if (curAudioEl) curAudioEl.classList.add("playing");
+    curAudio.addEventListener("ended", stopAudio);
+    await curAudio.play();
+  } catch { stopAudio(); }
+}
 async function renderJapanese() {
   const d = $("ja-date").value; if (!d) return;
+  jaDate = d; stopAudio();
   const box = $("ja-body");
   try {
     if (!jaCache[d]) { box.innerHTML = '<p class="muted">读取中…</p>'; jaCache[d] = await decryptJSON(await fetchText(`data/ja/${d}.json.enc`)); }
   } catch { box.innerHTML = '<p class="muted">这一天的讲义读取失败。</p>'; return; }
   const j = jaCache[d];
-  const sec = (title, inner) => inner ? `<section class="ja-sec"><h3>${title}</h3>${inner}</section>` : "";
-  let h = `<div class="ja-head"><div class="day-label">第 ${esc(j.week || "")} 周 · ${esc(j.weekday || "")}${j.week_title ? ` · ${esc(j.week_title)}` : ""}</div><h2>${inline(j.title || "今日日语")}</h2></div>`;
+  const au = hasAudio();
+  const play = (f) => (au && f ? ` data-audio="${esc(f)}"` : "");
+  const icon = (f) => (au && f ? '<span class="spk" aria-hidden="true">🔊</span>' : "");
+  const sec = (title, inner, id) => inner ? `<section class="ja-sec"${id ? ` id="${id}"` : ""}><h3>${title}</h3>${inner}</section>` : "";
+  let h = `<div class="ja-head"><div class="day-label">第 ${esc(j.week || "")} 周 · ${esc(j.weekday || "")}${j.week_title ? ` · ${esc(j.week_title)}` : ""}</div><h2>${inline(j.title || "今日日语")}</h2>
+    <p class="muted small">${au ? "点带 🔊 的句子、表达、生词和例句可以听发音，再点一下停止。" : "以前的日子只能看文字，没有声音。"}</p></div>`;
   if ((j.expressions || []).length) {
-    h += sec("今天的表达", j.expressions.map((e) => `<div class="ja-expr"><div class="ja-big">${inline(e.ja)}${e.srs ? ' <span class="ja-star" title="核心表达">★</span>' : ""}</div><div>${inline(e.zh || "")}</div>${e.use ? `<div class="muted small">${inline(e.use)}</div>` : ""}</div>`).join(""));
+    h += sec("今天的表达", j.expressions.map((e) => `<div class="ja-expr${au && e.audio ? " tap" : ""}"${play(e.audio)}><div class="ja-big">${ruby(e.ja_ruby || esc(e.ja))}${e.srs ? ' <span class="ja-star" title="核心表达">★</span>' : ""} ${icon(e.audio)}</div><div>${inline(e.zh || "")}</div>${e.use ? `<div class="muted small">${inline(e.use)}</div>` : ""}</div>`).join(""));
   }
   if (j.extra) h += `<p class="ja-extra">另外记住：${inline(j.extra)}</p>`;
   if (j.dialogue && (j.dialogue.lines || []).length) {
     h += sec("对话", `${j.dialogue.scene ? `<p class="muted small">${inline(j.dialogue.scene)}</p>` : ""}
       <button class="btn ghost small-btn" id="ja-zh-all">显示全部翻译</button>
-      ${j.dialogue.lines.map((l) => `<div class="ja-line"><span class="ja-who">${esc(l.who || "")}</span><div><div>${inline(l.ja)}</div><div class="ja-zh hidden">${inline(l.zh || "")}</div></div></div>`).join("")}
-      <p class="muted small">点一句可以看这一句的翻译。</p>`);
+      ${j.dialogue.lines.map((l) => `<div class="ja-line"><span class="ja-who">${esc(l.who || "")}</span><div class="ja-line-main"><div class="${au && l.audio ? "tap" : ""}"${play(l.audio)}>${ruby(l.ja_ruby || inline(l.ja))} ${icon(l.audio)}</div><div class="ja-zh hidden">${inline(l.zh || "")}</div></div><button class="zh-btn" aria-label="显示这一句的翻译">译</button></div>`).join("")}
+      <p class="muted small">点句子听发音，点右边的“译”看这一句的翻译。</p>`);
+  }
+  if ((j.grammar || []).length) {
+    h += sec("文法", j.grammar.map((g) => `<div class="ja-gram"><div class="ja-big">${esc(g.pattern)}${g.srs ? ' <span class="ja-star">★</span>' : ""}</div><div>${inline(g.meaning || "")}</div>${g.explain ? `<div class="muted small">${inline(g.explain)}</div>` : ""}${g.example ? `<div class="ja-ex${au && g.audio ? " tap" : ""}"${play(g.audio)}>${ruby(g.example_ruby || esc(g.example))} ${icon(g.audio)}<div class="muted small">${inline(g.example_zh || "")}</div></div>` : ""}</div>`).join(""));
   }
   if ((j.vocab || []).length) {
-    h += sec("生词", j.vocab.map((v) => `<div class="ja-vocab"><div><strong>${esc(v.word)}</strong>${v.reading && v.reading !== v.word ? `<span class="muted">（${esc(v.reading)}）</span>` : ""}　${inline(v.meaning || "")}</div>${v.example ? `<div class="small">${inline(v.example)}</div><div class="muted small">${inline(v.example_zh || "")}</div>` : ""}</div>`).join(""));
+    h += sec("生词", j.vocab.map((v) => `<div class="ja-vocab"><div class="${au && v.audio ? "tap" : ""}"${play(v.audio)}><strong>${ruby(v.word_ruby || esc(v.word))}</strong>${v.reading && v.reading !== v.word ? `<span class="muted">（${esc(v.reading)}）</span>` : ""}　${inline(v.meaning || "")} ${icon(v.audio)}</div>${v.example ? `<div class="small">${ruby(v.example_ruby || esc(v.example))}</div><div class="muted small">${inline(v.example_zh || "")}</div>` : ""}</div>`).join(""));
   }
-  if ((j.notes || []).length) h += sec("说明", `<ul>${j.notes.map((n) => `<li>${inline(n)}</li>`).join("")}</ul>`);
+  if ((j.notes || []).length) h += sec("用法提示", `<ul>${j.notes.map((n) => `<li>${inline(n)}</li>`).join("")}</ul>`);
   if ((j.quiz || []).length) h += sec("小测", `<ol>${j.quiz.map((q) => `<li>${inline(q.q)}<details><summary>看答案</summary>${inline(q.a)}</details></li>`).join("")}</ol>`);
   if (j.mission) h += sec("实战任务", `<p>${inline(j.mission)}</p>`);
   if (j.output) h += sec("1 分钟输出", `<p>${inline(j.output)}</p>`);
   if ((j.review_of || []).length) h += `<p class="muted small">复习范围：${j.review_of.map(esc).join("、")}</p>`;
   const r = j.recite || {};
+  const exBlock = (rb, plain, zh) => (plain ? `<div class="small">${ruby(rb || esc(plain))}</div><div class="muted small">${inline(zh || "")}</div>` : "");
   jaCards = [
-    ...(r.words || []).map((w) => ({ ja: w.word, back: `${w.reading && w.reading !== w.word ? `<div class="muted">${esc(w.reading)}</div>` : ""}<div class="ja-big">${inline(w.meaning || "")}</div>${w.example ? `<div class="small">${inline(w.example)}</div><div class="muted small">${inline(w.example_zh || "")}</div>` : ""}`, zh: w.meaning || "" })),
-    ...(r.phrases || []).map((p) => ({ ja: p.ja, back: `<div class="ja-big">${inline(p.zh || "")}</div>`, zh: p.zh || "" })),
+    ...(r.words || []).map((w) => ({ front: ruby(w.word_ruby || esc(w.word)), zh: inline(w.meaning || ""), audio: w.audio,
+      back: `${w.reading && w.reading !== w.word ? `<div class="muted">${esc(w.reading)}</div>` : ""}<div class="ja-big">${inline(w.meaning || "")}</div>${exBlock(w.example_ruby, w.example, w.example_zh)}` })),
+    ...(r.phrases || []).map((p) => ({ front: ruby(p.ja_ruby || esc(p.ja)), zh: inline(p.zh || ""), audio: p.audio,
+      back: `<div class="ja-big">${inline(p.zh || "")}</div>` })),
+    ...(r.grammar || []).map((g) => ({ front: esc(g.pattern), zh: inline(g.meaning || ""), audio: null, tag: "文法",
+      back: `<div class="ja-big">${inline(g.meaning || "")}</div>${exBlock(g.example_ruby, g.example, g.example_zh)}` })),
   ];
   if (jaCards.length) {
     h += sec(`本日背诵（${jaCards.length} 张）`, `${r.how ? `<p class="muted small">${inline(r.how)}</p>` : ""}
       <div class="card-tools"><button class="btn ghost small-btn" id="card-dir"></button><span id="card-count" class="muted small"></span></div>
       <div id="card" class="flashcard" role="button" tabindex="0"></div>
-      <div class="card-nav"><button class="btn" id="card-prev">← 上一张</button><button class="btn" id="card-next">下一张 →</button></div>`);
+      <div class="card-nav"><button class="btn" id="card-prev">← 上一张</button><button class="btn" id="card-next">下一张 →</button></div>`, "ja-recite");
   }
   box.innerHTML = h;
+  box.querySelectorAll("[data-audio]").forEach((el) => el.addEventListener("click", (e) => { e.stopPropagation(); playAudio(el.dataset.audio, el); }));
+  box.querySelectorAll(".zh-btn").forEach((b) => b.addEventListener("click", () => b.parentElement.querySelector(".ja-zh").classList.toggle("hidden")));
   const all = $("ja-zh-all");
   if (all) all.addEventListener("click", () => {
     const show = all.textContent.startsWith("显示");
     box.querySelectorAll(".ja-zh").forEach((z) => z.classList.toggle("hidden", !show));
     all.textContent = show ? "隐藏全部翻译" : "显示全部翻译";
   });
-  box.querySelectorAll(".ja-line").forEach((ln) => ln.addEventListener("click", () => ln.querySelector(".ja-zh").classList.toggle("hidden")));
   if (jaCards.length) {
     jaCardIdx = 0; jaCardFlip = false; drawCard();
-    $("card").addEventListener("click", () => { jaCardFlip = !jaCardFlip; drawCard(); });
-    $("card").addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); jaCardFlip = !jaCardFlip; drawCard(); } });
-    $("card-prev").addEventListener("click", () => { jaCardIdx = (jaCardIdx - 1 + jaCards.length) % jaCards.length; jaCardFlip = false; drawCard(); });
-    $("card-next").addEventListener("click", () => { jaCardIdx = (jaCardIdx + 1) % jaCards.length; jaCardFlip = false; drawCard(); });
+    const flip = () => { jaCardFlip = !jaCardFlip; drawCard(); if (jaCardFlip) playAudio(jaCards[jaCardIdx].audio, null); };
+    $("card").addEventListener("click", flip);
+    $("card").addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); } });
+    $("card-prev").addEventListener("click", () => { jaCardIdx = (jaCardIdx - 1 + jaCards.length) % jaCards.length; jaCardFlip = false; stopAudio(); drawCard(); });
+    $("card-next").addEventListener("click", () => { jaCardIdx = (jaCardIdx + 1) % jaCards.length; jaCardFlip = false; stopAudio(); drawCard(); });
     $("card-dir").addEventListener("click", () => { jaZhFront = !jaZhFront; jaCardFlip = false; drawCard(); });
   }
 }
 function drawCard() {
   const c = jaCards[jaCardIdx];
-  const jaFace = `<div class="ja-card-front">${inline(c.ja)}</div>`;
-  const zhFace = `<div class="ja-card-front">${inline(c.zh)}</div>`;
-  const front = jaZhFront ? zhFace : jaFace;
-  const back = jaZhFront ? `<div class="ja-card-front">${inline(c.ja)}</div>${c.back}` : c.back;
-  $("card").innerHTML = jaCardFlip ? back : `${front}<div class="muted small">点一下翻面</div>`;
+  const tag = c.tag ? `<span class="tag t-side">${c.tag}</span>` : "";
+  const front = jaZhFront ? `<div class="ja-card-front">${c.zh}</div>` : `<div class="ja-card-front">${c.front}</div>`;
+  const back = jaZhFront ? `<div class="ja-card-front">${c.front}</div>${c.back}` : c.back;
+  $("card").innerHTML = jaCardFlip ? `${tag}${back}` : `${tag}${front}<div class="muted small">点一下翻面${hasAudio() && c.audio ? "，同时播放发音" : ""}</div>`;
   $("card").classList.toggle("flipped", jaCardFlip);
   $("card-count").textContent = `${jaCardIdx + 1} / ${jaCards.length}`;
   $("card-dir").textContent = jaZhFront ? "改成正面日语" : "改成正面中文";
+}
+// 从任务跳到日语页（target = "ja" 或 "ja-recite"）
+async function gotoJapanese(target) {
+  closeSheets();
+  document.querySelector('.tab[data-tab="ja"]').click();
+  const sel = $("ja-date");
+  if ([...sel.options].some((o) => o.value === day) && sel.value !== day) { sel.value = day; await renderJapanese(); }
+  if (target === "ja-recite") setTimeout(() => { const el = $("ja-recite"); if (el) el.scrollIntoView({ behavior: "smooth" }); }, 200);
+  else window.scrollTo({ top: 0, behavior: "smooth" });
 }
 function toggle(id) {
   if (state.done[id]) delete state.done[id]; else state.done[id] = new Date().toISOString();
@@ -330,6 +383,10 @@ function fillSheet(id) {
   const links = (q.links || []).map((l) => `- [${l.label}](${l.url})`).join("\n");
   $("d-body").innerHTML = md([q.summary, q.detail, links].filter(Boolean).join("\n\n"));
   $("d-note").value = state.notes[id] || "";
+  const go = $("d-link");
+  go.classList.toggle("hidden", !q.link);
+  go.textContent = q.link === "ja-recite" ? "去背诵卡片 →" : "打开今日日语 →";
+  go.onclick = () => gotoJapanese(q.link);
   const btn = $("d-toggle"); const done = !!state.done[id];
   btn.textContent = done ? "取消完成" : "完成任务";
   btn.className = `btn wide ${done ? "" : "primary"}`;
@@ -437,9 +494,10 @@ document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () 
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === b));
   for (const name of ["quests", "archive", "ja"]) $(`tab-${name}`).classList.toggle("hidden", b.dataset.tab !== name);
   $("archive-list").classList.remove("hidden"); $("archive-view").classList.add("hidden");
-  if (b.dataset.tab === "ja") renderJapanese();
+  if (b.dataset.tab === "ja") { if ($("ja-date").value !== jaDate) renderJapanese(); } else stopAudio();
 }));
 $("ja-date").addEventListener("change", renderJapanese);
+$("kana-btn").addEventListener("click", () => setKana(document.body.classList.contains("hide-rt")));
 $("archive-back").addEventListener("click", () => { $("archive-list").classList.remove("hidden"); $("archive-view").classList.add("hidden"); });
 $("wallet-btn").addEventListener("click", () => { $("w-msg").textContent = ""; renderWallet(); $("wallet").classList.remove("hidden"); });
 $("w-spend").addEventListener("click", spend);
