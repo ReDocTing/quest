@@ -126,3 +126,20 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0 8px; }
 .sync { position: fixed; left: 0; right: 0; bottom: 0; text-align: center; font-size: 12px; color: var(--muted); padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--bg) 40%); }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: middle; }
 .dot.ok { background: var(--ok); } .dot.busy { background: var(--gold); } .dot.bad { background: var(--err); }
+
+/* 金币 */
+.top-actions { display: flex; align-items: center; gap: 4px; }
+.coin-chip { background: #2a2414; color: var(--gold); border: 1px solid var(--gold-dim); border-radius: 99px; padding: 6px 12px; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; }
+.w-balance { text-align: center; font-size: 40px; font-weight: 800; color: var(--gold); margin-top: 8px; display: flex; justify-content: center; gap: 8px; }
+.center { text-align: center; }
+input[type=number] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: inherit; outline: none; }
+.spend-list { list-style: none; padding: 0; margin: 0; }
+.spend-list li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.spend-list li > div:first-child { flex: 1; min-width: 0; }
+.spend-amt { color: var(--err); font-weight: 700; }
+
+/* 今日日语 */
+.ja { margin-top: 12px; font-size: 16px; }
+.md h2 { font-size: 19px; margin: 14px 0 8px; }
+.md details { background: var(--panel-2); border-radius: 10px; padding: 8px 12px; margin: 10px 0; }
+.md summary { cursor: pointer; color: var(--gold); font-weight: 600; }
