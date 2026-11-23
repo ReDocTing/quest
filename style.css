@@ -246,3 +246,52 @@ rt { font-size: 0.55em; color: var(--muted); }
 .rv-col { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
 .rv-col div { width: 22px; background: var(--daily); border-radius: 4px 4px 0 0; }
 .rv-fc { margin-bottom: 12px; }
+
+/* 饮食页（从 饮食/preview_template.html 复制） */
+.dt-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 12px 0; }
+.dt-card h3 { margin: 0 0 10px; font-size: 15px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+.dt-bar { position: relative; height: 10px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+.dt-bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--ok); }
+.dt-bar.thin { height: 6px; }
+.dt-bar .dt-band { position: absolute; top: 0; bottom: 0; background: rgba(255,255,255,.10); border-left: 1px dashed var(--muted); border-right: 1px dashed var(--muted); }
+.dt-bar .dt-mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); }
+.dt-main-num { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.dt-main-num b { font-size: 34px; line-height: 1.1; }
+.dt-main-num .arrow { color: var(--muted); }
+.dt-main-num .tgt { font-size: 20px; color: var(--gold); font-weight: 700; }
+.dt-row { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; margin: 6px 0 4px; }
+.dt-goal { padding: 10px 0; border-top: 1px solid var(--line); }
+.dt-goal:first-of-type { border-top: 0; }
+.dt-goal .lab { font-weight: 600; }
+.dt-goal .val { font-variant-numeric: tabular-nums; }
+.dt-warn > i { background: var(--err) !important; }
+.dt-pace { display: inline-block; font-size: 13px; padding: 2px 8px; border-radius: 99px; background: var(--panel-2); }
+.dt-pace.ahead, .dt-pace.on { color: var(--ok); } .dt-pace.behind { color: var(--err); } .dt-pace.start { color: var(--daily); }
+.dt-stones { display: flex; gap: 4px; margin-top: 12px; }
+.dt-stone { flex: 1; text-align: center; font-size: 11px; color: var(--muted); padding: 6px 2px; border-radius: 8px; background: var(--panel-2); }
+.dt-stone b { display: block; font-size: 13px; color: var(--text); }
+.dt-stone.next { outline: 1px solid var(--gold); } .dt-stone.next b { color: var(--gold); }
+.dt-stone.hit b { color: var(--ok); } .dt-stone.miss b { color: var(--err); }
+.dt-kcal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-bottom: 12px; }
+.dt-kcal div { background: var(--panel-2); border-radius: 10px; padding: 8px 4px; }
+.dt-kcal b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.dt-kcal span { font-size: 12px; color: var(--muted); }
+.dt-balance { text-align: center; font-size: 14px; margin-top: 10px; }
+.dt-balance b { font-size: 18px; color: var(--ok); }
+.dt-meal { border-top: 1px solid var(--line); padding: 10px 0; }
+.dt-meal:first-of-type { border-top: 0; padding-top: 0; }
+.dt-meal-head { display: flex; justify-content: space-between; font-weight: 600; }
+.dt-meal-head span { color: var(--gold); font-variant-numeric: tabular-nums; }
+.dt-items { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+.dt-items td { padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.dt-items td.n { text-align: right; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; padding-left: 8px; }
+.dt-items tr:last-child td { border-bottom: 0; }
+.dt-items tr.sum td { color: var(--text); font-weight: 600; border-top: 1px solid var(--line); }
+.dt-note { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.dt-advice { background: rgba(242,193,78,.08); border-color: #4a3d1c; }
+.dt-advice p { margin: 0; }
+.dt-chart svg { width: 100%; height: auto; display: block; }
+.dt-legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+.dt-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+details.dt-card summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 15px; }
+details.dt-card[open] summary { margin-bottom: 8px; }

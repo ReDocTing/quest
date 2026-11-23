@@ -519,9 +519,9 @@ async function renderDigest() {
 
 // 从任务的按钮跳到别的页面：ja / ja-recite / digest
 function gotoLink(link) {
-  if (link === "digest" || link === "ja-review") {
+  if (link === "digest" || link === "ja-review" || link === "diet") {
     closeSheets();
-    document.querySelector(`.tab[data-tab="${link === "digest" ? "digest" : "review"}"]`).click();
+    document.querySelector(`.tab[data-tab="${link === "ja-review" ? "review" : link}"]`).click();
     window.scrollTo({ top: 0, behavior: "smooth" });
   } else gotoJapanese(link);
 }
@@ -626,6 +626,128 @@ function finishReview() {
     <p class="muted small">结果已存进今天的同步状态，明天推送时自动回到记忆库。</p></div>`;
 }
 
+
+// ---------- 饮食（饮食对话写的 饮食/输出/日期.json，推送时加密成 data/diet/日期.json.enc；页面由它提供的 renderDiet 生成） ----------
+function renderDiet(j) {
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const n = (x, dg = 0) => x == null ? "—" : Number(x).toLocaleString("zh-CN", { maximumFractionDigits: dg, minimumFractionDigits: dg });
+  const pct = (x) => Math.max(0, Math.min(100, x * 100)).toFixed(1) + "%";
+  const sgn = (x, u) => x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "±") + n(Math.abs(x), 1) + u;
+  let h = "";
+
+  // 1. 主目标：体重
+  const w = j.goals.find((g) => g.main) || j.goals[0];
+  const t = j.timeline;
+  h += `<section class="dt-card"><h3>目标进度</h3>
+    <div class="dt-main-num"><b>${n(w.current, 1)}</b><span class="muted">${esc(w.unit)}</span><span class="arrow">→</span><span class="tgt">${n(w.target, 1)}${esc(w.unit)}</span></div>
+    <div class="muted small">${esc(w.source)}</div>
+    <div style="margin:6px 0 10px"><span class="dt-pace ${esc(t.pace)}">${esc(t.pace_text)}</span></div>
+    <div class="dt-row"><span>减重 ${n(w.progress * 100, 0)}%</span><span class="muted">${(w.delta || 0) <= 0 ? `已减 ${n(-(w.delta || 0), 1)}` : `比起点 +${n(w.delta, 1)}`} · 还差 ${n(w.remaining, 1)}${esc(w.unit)}</span></div>
+    <div class="dt-bar${w.status === "warn" ? " dt-warn" : ""}"><i style="width:${pct(w.progress)}"></i></div>
+    <div class="dt-row"><span>时间 ${n(t.time_progress * 100, 0)}%</span><span class="muted">第 ${t.days_passed}/${t.days_total} 天 · 按计划今天 ${n(t.expected_weight, 1)}kg</span></div>
+    <div class="dt-bar thin"><i style="width:${pct(t.time_progress)};background:var(--rest)"></i></div>
+    <div class="dt-stones">${t.milestones.map((m) => {
+      const cls = m.date === t.next_milestone.date ? "next" : m.hit === true ? "hit" : m.hit === false ? "miss" : "";
+      return `<div class="dt-stone ${cls}" title="${esc(m.label)}">${esc(m.date.slice(5).replace("-", "/"))}<b>${m.low === m.high ? m.low : m.low + "–" + m.high}</b></div>`;
+    }).join("")}</div>
+    <div class="dt-note">下一个阶段：${esc(t.next_milestone.label)} ${t.next_milestone.low === t.next_milestone.high ? t.next_milestone.low : t.next_milestone.low + "–" + t.next_milestone.high}kg，还有 ${t.next_milestone.days_left} 天</div>
+  </section>`;
+
+  // 2. 其他指标
+  h += `<section class="dt-card"><h3>身体成分${j.inbody ? `（InBody ${esc(j.inbody.date)}）` : ""}</h3>` +
+    j.goals.filter((g) => g !== w).map((g) => {
+      const right = g.kind === "keep"
+        ? `${n(g.current, 1)}${esc(g.unit)} <span class="muted">维持 ≥${n(g.target, 1)}，底线 ${n(g.floor, 1)}</span>`
+        : `${n(g.current, 1)} → <span style="color:var(--gold)">${n(g.target, 1)}</span>${esc(g.unit)} <span class="muted">${sgn(g.delta, g.unit)}</span>`;
+      return `<div class="dt-goal"><div class="dt-row"><span class="lab">${esc(g.label)}</span><span class="val">${right}</span></div>
+        <div class="dt-bar thin${g.status === "warn" ? " dt-warn" : ""}"><i style="width:${pct(g.progress)}${g.kind === "keep" ? ";background:var(--daily)" : ""}"></i></div>
+        ${g.note ? `<div class="dt-note">${esc(g.note)}</div>` : ""}</div>`;
+    }).join("") + `</section>`;
+
+  // 3. 今日热量
+  const it = j.intake, pl = j.plan, ex = j.expenditure, bal = j.balance, tg = pl.targets;
+  const scale = Math.max(ex.total, pl.total.kcal, it.total.kcal) * 1.05;
+  h += `<section class="dt-card"><h3>今日热量 · ${esc(j.date.slice(5))} ${esc(j.weekday)}${pl.training_day ? " · 训练日" : ""}</h3>
+    <div class="dt-kcal">
+      <div><b style="color:var(--gold)">${n(it.total.kcal)}</b><span>已吃（${it.meals_logged} 顿）</span></div>
+      <div><b>${n(pl.total.kcal)}</b><span>计划摄入</span></div>
+      <div><b style="color:var(--train)">${n(ex.total)}</b><span>消耗${ex.steps_estimated ? "（预估）" : ""}</span></div>
+    </div>
+    <div class="dt-row small"><span>已吃 / 计划</span><span class="muted">${it.remaining.kcal >= 0 ? `还能吃 ${n(it.remaining.kcal)}` : `超出 ${n(-it.remaining.kcal)}`} kcal</span></div>
+    <div class="dt-bar"><i style="width:${pct(it.total.kcal / scale)};background:var(--gold)"></i><span class="dt-mark" style="left:${pct(pl.total.kcal / scale)}"></span></div>
+    <div class="dt-row small"><span>消耗</span><span class="muted">白线 = 计划摄入</span></div>
+    <div class="dt-bar"><i style="width:${pct(ex.total / scale)};background:var(--train)"></i><span class="dt-mark" style="left:${pct(pl.total.kcal / scale)}"></span></div>
+    <div class="dt-balance">${bal.day_complete && bal.deficit != null ? `今日实际缺口 <b>${n(bal.deficit)}</b> kcal <span class="muted">（计划 ${n(bal.planned_deficit)}）</span>` : `按计划吃完，缺口 <b>${n(bal.planned_deficit)}</b> kcal`}</div>
+  </section>`;
+
+  // 4. 宏量
+  const macro = (k, label, color) => {
+    const [lo, hi] = tg[k], max = hi * 1.25, v = it.total[k];
+    return `<div class="dt-row small"><span>${label}</span><span class="val">${n(v)} g <span class="muted">/ 目标 ${lo}–${hi}</span></span></div>
+      <div class="dt-bar"><span class="dt-band" style="left:${pct(lo / max)};width:${pct((hi - lo) / max)}"></span><i style="width:${pct(v / max)};background:${color}"></i></div>`;
+  };
+  h += `<section class="dt-card"><h3>宏量营养（已吃）</h3>${macro("p", "蛋白质", "var(--ok)")}${macro("c", "碳水", "var(--daily)")}${macro("f", "脂肪", "var(--side)")}
+    <div class="dt-note">虚线框是目标范围</div></section>`;
+
+  // 5. 提醒
+  if (j.advice) h += `<section class="dt-card dt-advice"><h3>下一顿提醒</h3><p>${esc(j.advice)}</p></section>`;
+
+  // 6. 今日摄入（照片估算）
+  const itemRows = (items, sum) => `<table class="dt-items">${items.map((x) => `<tr><td>${esc(x.food)}${x.amount ? ` <span class="muted">${esc(x.amount)}</span>` : ""}</td><td class="n">${n(x.kcal)} kcal · P${n(x.p)}</td></tr>`).join("")}${sum ? `<tr class="sum"><td>合计</td><td class="n">${n(sum.kcal)} kcal · P${n(sum.p)} C${n(sum.c)} F${n(sum.f)}</td></tr>` : ""}</table>`;
+  h += `<section class="dt-card"><h3>今日摄入（拍照估算）</h3>` + (it.meals.length
+    ? it.meals.map((m) => `<div class="dt-meal"><div class="dt-meal-head"><div>${esc(m.name)} <small class="muted">${esc(m.time)}${m.source === "photo" ? " 📷" : ""}</small></div><span>${n(m.total.kcal)} kcal · P${n(m.total.p)}</span></div>${itemRows(m.items)}${m.note ? `<div class="dt-note">${esc(m.note)}</div>` : ""}</div>`).join("")
+    : `<p class="muted">还没有记录。吃饭时拍照发给饮食对话，更新后这里会显示。</p>`) + `</section>`;
+
+  // 7. 计划摄入、消耗明细（折叠）
+  h += `<details class="dt-card"><summary>计划摄入 ${n(pl.total.kcal)} kcal${pl.training_day ? "（含训练日加餐）" : ""}</summary>${itemRows(pl.items, pl.total)}</details>`;
+  h += `<details class="dt-card"><summary>消耗明细 ${n(ex.total)} kcal</summary><table class="dt-items">
+    <tr><td>基础代谢 ${n(ex.bmr)} × ${n(ex.base_factor, 1)}（日常生活和消化）</td><td class="n">${n(ex.base)}</td></tr>
+    <tr><td>走路 ${n(ex.steps)} 步${ex.steps_estimated ? "（还没报步数，按计划算）" : ""}</td><td class="n">${n(ex.walk)}</td></tr>
+    <tr><td>力量训练${pl.training_note ? ` <span class="muted">${esc(pl.training_note)}</span>` : ""}</td><td class="n">${n(ex.training_kcal)}</td></tr>
+    <tr class="sum"><td>合计</td><td class="n">${n(ex.total)} kcal</td></tr></table></details>`;
+
+  // 8. 最近 14 天
+  const rc = j.recent.filter((r) => r.intake != null || r.weight != null);
+  if (rc.length >= 2) {
+    const W = 600, H = 170, pad = 26, bw = (W - pad * 2) / 14;
+    const slot = (r) => 13 - Math.round((new Date(j.date) - new Date(r.date)) / 864e5);  // 固定 14 格，今天在最右
+    const kmax = Math.max(...rc.map((r) => Math.max(r.expenditure, r.intake || 0))) * 1.05;
+    const ws = rc.filter((r) => r.weight != null).map((r) => r.weight);
+    const wlo = Math.min(...ws) - 0.5, whi = Math.max(...ws) + 0.5;
+    const y = (k) => H - pad - (k / kmax) * (H - pad * 2), yw = (v) => pad + (whi - v) / (whi - wlo) * (H - pad * 2);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="最近摄入、消耗和体重">`;
+    rc.forEach((r) => {
+      const x = pad + slot(r) * bw;
+      s += `<rect x="${x + bw * .15}" y="${y(r.expenditure)}" width="${bw * .32}" height="${H - pad - y(r.expenditure)}" fill="#ff7a59" opacity=".55"/>`;
+      if (r.intake != null) s += `<rect x="${x + bw * .5}" y="${y(r.intake)}" width="${bw * .32}" height="${H - pad - y(r.intake)}" fill="#f2c14e"/>`;
+      s += `<text x="${x + bw / 2}" y="${H - 8}" fill="#8a94ab" font-size="11" text-anchor="middle">${esc(r.date.slice(8))}</text>`;
+    });
+    const pts = rc.map((r) => r.weight == null ? null : [pad + slot(r) * bw + bw / 2, yw(r.weight)]).filter(Boolean);
+    if (pts.length >= 2) s += `<polyline points="${pts.map((p) => p.join(",")).join(" ")}" fill="none" stroke="#4fd18b" stroke-width="2"/>`;
+    pts.forEach((p, i) => s += `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="#4fd18b"/>`);
+    s += `</svg>`;
+    h += `<section class="dt-card dt-chart"><h3>最近 14 天</h3>${s}<div class="dt-legend"><span><i style="background:#ff7a59;opacity:.55"></i>消耗</span><span><i style="background:#f2c14e"></i>摄入</span><span><i style="background:#4fd18b"></i>体重</span></div></section>`;
+  }
+  return h;
+}
+
+function fillDietDates() {
+  const dates = [...(index.diet || [])].sort();
+  const sel = $("diet-date"); sel.innerHTML = "";
+  for (const d of [...dates].reverse()) { const o = document.createElement("option"); o.value = d; o.textContent = dayLabel(d); sel.appendChild(o); }
+  const t = todayStr();
+  if (dates.length) sel.value = dates.includes(t) ? t : (dates.filter((d) => d <= t).pop() || dates[dates.length - 1]);
+}
+async function renderDietTab() {
+  const box = $("diet-body"), d = $("diet-date").value;
+  if (!d) { box.innerHTML = '<p class="muted dg-empty">还没有推送过饮食数据。</p>'; return; }
+  box.innerHTML = '<p class="muted">读取中…</p>';
+  try {
+    const j = await decryptJSON(await fetchText(`data/diet/${d}.json.enc`)); // 每次打开都重新读，饮食一天会更新好几次
+    box.innerHTML = renderDiet(j) + `<p class="muted small">更新于 ${esc(j.updated || "")}</p>`;
+  } catch { box.innerHTML = '<p class="muted">这一天的饮食数据读取失败。</p>'; }
+}
+
 function toggle(id) {
   const q = dayData.quests.find((x) => x.id === id);
   if (q && lockReason(q) && !state.done[id]) return; // 强制休息日不能勾
@@ -643,7 +765,7 @@ function fillSheet(id) {
   $("d-note").value = state.notes[id] || "";
   const go = $("d-link");
   go.classList.toggle("hidden", !q.link);
-  go.textContent = q.link === "ja-recite" ? "去背诵卡片 →" : q.link === "digest" ? "打开每日资讯 →" : q.link === "ja-review" ? "去日语复习 →" : "打开今日日语 →";
+  go.textContent = q.link === "ja-recite" ? "去背诵卡片 →" : q.link === "digest" ? "打开每日资讯 →" : q.link === "ja-review" ? "去日语复习 →" : q.link === "diet" ? "打开饮食页 →" : "打开今日日语 →";
   go.onclick = () => gotoLink(q.link);
   const btn = $("d-toggle"); const done = !!state.done[id]; const lock = lockReason(q);
   btn.disabled = !!lock && !done;
@@ -716,7 +838,7 @@ async function openDay() {
   dayData = await decryptJSON(await fetchText(`data/${day}.json.enc`));
   [state, wallet, wishlist] = await Promise.all([loadState(day), loadWallet(), loadWishlist()]);
   await loadPrevGym();
-  render(); renderArchive(); fillJaDates();
+  render(); renderArchive(); fillJaDates(); fillDietDates();
 }
 async function unlockWith(raw) {
   key = await importKey(raw);
@@ -752,13 +874,15 @@ $("d-note").addEventListener("blur", render);
 $("journal").addEventListener("input", (e) => { state.journal = e.target.value; saveState(); });
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === b));
-  for (const name of ["quests", "archive", "ja", "review", "digest"]) $(`tab-${name}`).classList.toggle("hidden", b.dataset.tab !== name);
+  for (const name of ["quests", "archive", "ja", "review", "diet", "digest"]) $(`tab-${name}`).classList.toggle("hidden", b.dataset.tab !== name);
+  if (b.dataset.tab === "diet") renderDietTab();
   if (b.dataset.tab === "digest") renderDigest();
   if (b.dataset.tab === "review") renderReview();
   $("archive-list").classList.remove("hidden"); $("archive-view").classList.add("hidden");
   if (b.dataset.tab === "ja") { if ($("ja-date").value !== jaDate) renderJapanese(); } else stopAudio();
 }));
 $("ja-date").addEventListener("change", renderJapanese);
+$("diet-date").addEventListener("change", renderDietTab);
 $("kana-btn").addEventListener("click", () => setKana(document.body.classList.contains("hide-rt")));
 $("archive-back").addEventListener("click", () => { $("archive-list").classList.remove("hidden"); $("archive-view").classList.add("hidden"); });
 $("wallet-btn").addEventListener("click", () => { $("w-msg").textContent = ""; renderWallet(); $("wallet").classList.remove("hidden"); });
