@@ -317,3 +317,8 @@ html, body { overflow-x: hidden; }
 
 /* 页面本身不允许横向滚动（clip 连脚本滚动也禁止；旧浏览器退回 hidden） */
 html, body { overflow-x: hidden; overflow-x: clip; }
+
+/* 任务按类型分组：组标题 */
+.q-group { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 4px 8px; font-size: 13px; font-weight: 600; letter-spacing: .08em; color: var(--c); }
+.q-group:first-child { margin-top: 4px; }
+.q-group-n { font-weight: 400; color: var(--muted, #8b93a7); letter-spacing: 0; }

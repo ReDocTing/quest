@@ -4,11 +4,11 @@
 // 用金币兑换的“努力的奖励”记在 wallet.json.enc，都通过 GitHub API 同步。
 
 const LS = { key: "quest.key", token: "quest.token", cache: "quest.cache.", wallet: "quest.wallet" };
-const TYPE = {
+const TYPE = {   // 顺序 = 任务列表里分组的顺序
   main: { name: "主线", cls: "t-main" },
-  daily: { name: "日常", cls: "t-daily" },
-  train: { name: "修炼", cls: "t-train" },
   side: { name: "支线", cls: "t-side" },
+  train: { name: "修炼", cls: "t-train" },
+  daily: { name: "日常", cls: "t-daily" },
   rest: { name: "作息", cls: "t-rest" },
 };
 const $ = (id) => document.getElementById(id);
@@ -248,15 +248,27 @@ function render() {
   $("xp-bar").style.width = c.dayAll ? `${Math.min(100, (c.dayGot / c.dayAll) * 100)}%` : "0";
 
   const ul = $("quest-list"); ul.innerHTML = "";
-  for (const q of qs) {
-    const tp = TYPE[q.type] || TYPE.daily;
+  // 按类型分组显示：主线 → 支线 → 修炼 → 日常 → 作息，组内保持原来的顺序
+  const order = Object.keys(TYPE), typeOf = (q) => (TYPE[q.type] ? q.type : "daily");
+  const sorted = [...qs].sort((a, b) => order.indexOf(typeOf(a)) - order.indexOf(typeOf(b)));
+  let curType = null;
+  for (const q of sorted) {
+    const tp = TYPE[typeOf(q)];
+    if (typeOf(q) !== curType) {
+      curType = typeOf(q);
+      const grp = qs.filter((x) => typeOf(x) === curType && !lockReason(x));
+      const h = document.createElement("li");
+      h.className = `q-group ${tp.cls}`;
+      h.innerHTML = `<span>${tp.name}</span><span class="q-group-n">${grp.filter((x) => state.done[x.id]).length} / ${grp.length}</span>`;
+      ul.appendChild(h);
+    }
     const lock = lockReason(q);
     const li = document.createElement("li");
     li.className = `quest ${tp.cls}${state.done[q.id] ? " done" : ""}${lock ? " locked" : ""}`;
     li.innerHTML = `
       <button class="check-btn" aria-label="${lock ? "强制休息，不能勾选" : "完成"}"${lock ? " disabled" : ""}>${lock ? "休" : state.done[q.id] ? "✓" : ""}</button>
       <div class="q-main">
-        <div class="q-meta"><span class="q-type">${tp.name}</span>${q.time ? `<span>推荐 ${esc(q.time)}</span>` : ""}${state.notes[q.id] ? '<span class="q-note">✎ 有补充</span>' : ""}</div>
+        ${state.notes[q.id] ? '<div class="q-meta"><span class="q-note">✎ 有补充</span></div>' : ""}
         <div class="q-title">${esc(q.title)}</div>
         ${lock ? `<div class="q-sum lock-msg">${esc(lock)}</div>` : q.summary ? `<div class="q-sum">${esc(q.summary)}</div>` : ""}
       </div>
@@ -767,7 +779,7 @@ function toggle(id) {
 function fillSheet(id) {
   const q = dayData.quests.find((x) => x.id === id); const tp = TYPE[q.type] || TYPE.daily;
   const tag = $("d-type"); tag.textContent = tp.name; tag.className = `tag ${tp.cls}`;
-  $("d-time").textContent = [q.time && `推荐 ${q.time}`, `+${q.coins || 0} 金币`].filter(Boolean).join(" · ");
+  $("d-time").textContent = `+${q.coins || 0} 金币`;
   $("d-title").textContent = q.title;
   const links = (q.links || []).map((l) => `- [${l.label}](${l.url})`).join("\n");
   $("d-body").innerHTML = md([q.summary, q.detail, links].filter(Boolean).join("\n\n"));
